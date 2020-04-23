@@ -13,7 +13,8 @@ FCFLAGS  = -xHost -vec-report -openmp  -openmp-report
 #FCFLAGS = -ftree-vectorize -msse2 -ftree-vectorizer-verbose=2 #-fbacktrace -ggdb -g -fcheck=all -ffpe-trap=invalid,zero
 LIBS     =  -lnetcdff -lnetcdf -loverprint
 
-OBJS = parametersmod.o   \
+OBJS = overprint.o       \
+       parametersmod.o   \
        netcdfmod.o       \
        utilitiesmod.o    \
        distmod.o         \
