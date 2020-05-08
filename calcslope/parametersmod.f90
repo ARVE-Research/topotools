@@ -1,12 +1,16 @@
 module parametersmod
 
-integer, parameter :: i2 = selected_int_kind(4)
-integer, parameter :: i4 = selected_int_kind(8)
-integer, parameter :: i8 = selected_int_kind(13)
-integer, parameter :: sp = selected_real_kind(4)   !4 for single precision
-integer, parameter :: dp = selected_real_kind(13)
+use iso_fortran_env, only : int16,int32,int64,real32,real64
 
-real(dp), parameter :: pi     =    3.14159265359d0
-real(dp), parameter :: d2r    = pi / 180.d0
+implicit none
+
+integer, parameter :: i2 = int16
+integer, parameter :: i4 = int32
+integer, parameter :: i8 = int64
+integer, parameter :: sp = real32
+integer, parameter :: dp = real64
+
+real(dp), parameter :: pi  =    3.14159265358979323846_dp
+real(dp), parameter :: d2r = pi / 180._dp
 
 end module parametersmod

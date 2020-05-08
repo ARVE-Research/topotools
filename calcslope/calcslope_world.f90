@@ -2,8 +2,8 @@ program calcslope
 
 !calculate slopes from a 3" DEM using the method of Song & Shan (Photogrammetric Eng. & Remote Sens., 75(3), 281-290)
 
-use parametersmod, only : i2,i4,sp,dp
-use netcdfmod,     only : ncstat,handle_err,makeoutfile
+use parametersmod, only : i4,sp,dp,d2r
+use netcdfmod,     only : ncstat,handle_err
 use distmod,       only : sphdist
 use coordsmod,     only : index,parsecoords
 use utilitiesmod,  only : iminloc
@@ -11,6 +11,8 @@ use outputmod,     only : genoutfile,putlonlat
 use netcdf
 
 implicit none
+
+real(sp), parameter :: minslope = 0.005  ! minimum slope for calculating an aspect = 0.5% or 1/200 m m-1
 
 character(100) :: infile
 character(100) :: outfile
@@ -27,16 +29,18 @@ integer :: id_olon
 integer :: id_olat
 integer :: id_dem
 integer :: id_slope
+integer :: id_aspect
 
-real(dp),    allocatable, dimension(:)   :: all_lon
-real(dp),    allocatable, dimension(:)   :: lon
-real(dp),    allocatable, dimension(:)   :: lat
-integer(i2), allocatable, dimension(:,:) :: dem
-real(sp),    allocatable, dimension(:,:) :: slope
+real(dp), allocatable, dimension(:)   :: all_lon
+real(dp), allocatable, dimension(:)   :: lon
+real(dp), allocatable, dimension(:)   :: lat
+real(sp), allocatable, dimension(:,:) :: dem
+real(sp), allocatable, dimension(:,:) :: slope
+real(sp), allocatable, dimension(:,:) :: aspect
 
-real(dp),    dimension(8) :: snbr
-real(sp),    dimension(8) :: dist
-integer(i2), dimension(8) :: elev
+real(dp), dimension(8) :: snbr
+real(sp), dimension(8) :: dist
+real(sp), dimension(8) :: elev
 
 integer(i4), dimension(8,2) :: idx
 
@@ -54,9 +58,9 @@ integer :: l
 
 real(sp), dimension(8) :: dz
 
-integer(i2) :: missing_i2
+real(sp), dimension(2) :: range_elv
 
-real(sp),    parameter :: missing_sp = -9999.
+real(sp) :: missing
 
 logical, dimension(8) :: nbr
 
@@ -99,16 +103,22 @@ character(80) :: status_line
 
 logical, dimension(8) :: nsf
 
-!--------
+integer, dimension(1) :: dir
 
-idx(1,:) = [-1, 1]
-idx(2,:) = [ 0, 1]
-idx(3,:) = [ 1, 1]
-idx(4,:) = [-1, 0]
-idx(5,:) = [ 1, 0]
-idx(6,:) = [-1,-1]
-idx(7,:) = [ 0,-1]
-idx(8,:) = [ 1,-1]
+real(sp) :: Ad8
+real(sp) :: Afd
+
+!--------
+! neighbor node numbering convention used in Wilson and Gallant (Terrain Analysis, 2000) and in other papers
+
+idx(1,:) = [ 1, 1]    ! northeast
+idx(2,:) = [ 1, 0]    ! east
+idx(3,:) = [ 1,-1]    ! southeast
+idx(4,:) = [ 0,-1]    ! south
+idx(5,:) = [-1,-1]    ! southwest
+idx(6,:) = [-1, 0]    ! west
+idx(7,:) = [-1, 1]    ! northwest
+idx(8,:) = [ 0, 1]    ! north
 
 !---
 
@@ -141,7 +151,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_inquire_dimension(ifid,dimid,len=ylen)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-!write(0,*)'infile size: ',xlen,ylen
+write(0,*)'infile size: ',xlen,ylen
 
 !---
 
@@ -182,20 +192,28 @@ id%endy = iminloc(abs(id%maxlat - lat))    !end-y
 
 !adjust the nodes to select if the nearest node automatically selected is outside the area of interest
 
-if (lon(id%startx) < id%minlon) id%startx = id%startx + 1
-if (lon(id%endx)   > id%maxlon) id%endx   = id%endx   - 1
+if (id%startx /= id%endx) then
 
-if (lat(id%starty) < id%minlat) id%starty = id%starty + 1
-if (lat(id%endy)   > id%maxlat) id%endy   = id%endy   - 1
+  if (lon(id%startx) < id%minlon) id%startx = id%startx + 1
+  if (lon(id%endx)   > id%maxlon) id%endx   = id%endx   - 1
+
+end if
+
+if (id%starty /= id%endy) then
+
+  if (lat(id%starty) < id%minlat) id%starty = id%starty + 1
+  if (lat(id%endy)   > id%maxlat) id%endy   = id%endy   - 1
+
+end if
 
 id%countx = 1 + id%endx - id%startx  !add one to include the start and end points
 id%county = 1 + id%endy - id%starty
 
-write(0,*)minval(lon),maxval(lon)
-write(0,*)minval(lat),maxval(lat)
+write(0,*)'lon range: ',minval(lon),maxval(lon)
+write(0,*)'lat_range: ',minval(lat),maxval(lat)
 
-write(0,*)id%startx,id%endx,id%countx
-write(0,*)id%starty,id%endy,id%county
+write(0,*)'x range: ',id%startx,id%endx,id%countx
+write(0,*)'y range: ',id%starty,id%endy,id%county
 
 !read(*,*)
 
@@ -211,18 +229,25 @@ deallocate(lat)
 ncstat = nf90_inq_varid(ifid,'elv',zvarid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_get_att(ifid,zvarid,'missing_value',missing_i2)
+ncstat = nf90_get_att(ifid,zvarid,'missing_value',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_get_att(ifid,zvarid,'valid_range',range_elv)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inquire_variable(ifid,zvarid,chunksizes=cs)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+cs(1) = min(cs(1),id%countx)
+cs(2) = min(cs(2),id%county)
+
 write(0,*)'chunksizes:',cs
+write(0,*)'range elv: ',range_elv
 
 !---
 
-write(0,*)id%startx,id%countx
-write(0,*)id%starty,id%county
+! write(0,*)id%startx,id%countx
+! write(0,*)id%starty,id%county
 
 !---
 !generate output file
@@ -241,6 +266,9 @@ ncstat = nf90_inq_varid(ofid,'elev',id_dem)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_varid(ofid,'slope',id_slope)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'aspect',id_aspect)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !---
@@ -275,6 +303,7 @@ allocate(lon(0:blklenx+1))
 allocate(lat(0:blkleny+1))
 allocate(dem(0:blklenx+1,0:blkleny+1))
 allocate(slope(blklenx,blkleny))
+allocate(aspect(blklenx,blkleny))
 
 !l = 0
 
@@ -300,7 +329,7 @@ do j = 1,nblky
 
     call putlonlat(ofid,id_olon,id_olat,all_lon(id%startx:id%endx),lat(1:blkleny),1,srty_o)
 
-    cycle !skip it for now
+    cycle !skip it for now (no Antarctica data anyway)
 
   else if (srty + blkleny + 1 > ylen) then  !at top edge of global grid
 
@@ -335,7 +364,7 @@ do j = 1,nblky
     !write(status_line,'(a,3i5,4i8)')' working on: ',l,i,j,srtx,xlen,srty,ylen
     !call overprint(trim(status_line))
     
-    if (srtx == 1) then  !at left edge of global grid
+    if (srtx == 1) then  !at left edge of global grid, first column copied from last column in input
       
       !write(0,*)'case left edge'
       
@@ -351,7 +380,7 @@ do j = 1,nblky
       ncstat = nf90_get_var(ifid,zvarid,dem(1:,:),start=[srtx,srty-1],count=[blklenx+1,blkleny+2])
       if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-    else if (srtx + blklenx + 1 > xlen) then  !at right edge of global grid
+    else if (srtx + blklenx + 1 > xlen) then  !at right edge of global grid, last column copied from first column in input
 
       !write(0,*)'case right edge'
       
@@ -377,9 +406,9 @@ do j = 1,nblky
 
     end if
         
-    where (dem < -1000) dem = missing_i2
+    where (dem < range_elv(1)) dem = missing
 
-    if (all(dem == missing_i2)) then
+    if (all(dem == missing)) then
 
       call putlonlat(ofid,id_olon,id_olat,lon(1:blklenx),lat(1:blkleny),srtx_o,srty_o)
 
@@ -387,18 +416,19 @@ do j = 1,nblky
 
     end if
     
-    slope = missing_sp
+    slope  = missing
+    aspect = missing
 
     !calculate slopes in the block that is in the center of the superblock
     
-    !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(blklenx,blkleny,missing_i2,dem,idx,slope,lon,lat,chunk)
+    !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(blklenx,blkleny,missing,dem,idx,slope,aspect,lon,lat,chunk)
     !$OMP DO SCHEDULE(DYNAMIC,chunk)
     
     do y0 = 1,blkleny
       do x0 = 1,blklenx
         
-        if (dem(x0,y0) == missing_i2) cycle
-        
+        if (dem(x0,y0) == missing) cycle
+                
         ll0 = [lon(x0),lat(y0)]
         
         nbr = .true.
@@ -420,13 +450,13 @@ do j = 1,nblky
           cycle
        
         else
-       
+              
           do n = 1,8
           
             x = x0 + idx(n,1)
             y = y0 + idx(n,2)
             
-            if (dem(x,y) == missing_i2) then                    !or otherwise missing neighbor
+            if (dem(x,y) == missing) then    ! or otherwise missing neighbor
 
               nbr(n) = .false.
            
@@ -447,37 +477,68 @@ do j = 1,nblky
               snbr(n) = dz(n) / dist(n)
 
             end if
+            
           end do
         end if
 
-        Sd8 = max(maxval(snbr,mask=nbr),0.d0)
+        ! D8 slope calculation
+        
+        Sd8 = max(maxval(snbr,mask=nbr),0._dp)
+        
+        ! D8 aspect
+        
+        dir = maxloc(snbr,mask=nbr)
 
-        if (all(nbr)) then
+        Ad8 = 45. * real(dir(1))
 
-          dzdxc = real(elev(2) - elev(6)) / (dist(2) + dist(6))
-          dzdyc = real(elev(8) - elev(4)) / (dist(8) + dist(4))
-          dzdxd = real(elev(1) - elev(5)) / (dist(1) + dist(5))
-          dzdyd = real(elev(7) - elev(3)) / (dist(7) + dist(3))
+        if (all(nbr)) then  
+        
+          ! all neighbor gridcells are present so we can calculate finite differences
+
+          dzdxc = real(elev(2) - elev(6)) / (dist(2) + dist(6))  ! east-west   (dz/dx cardinal)
+          dzdyc = real(elev(8) - elev(4)) / (dist(8) + dist(4))  ! north-south (dz/dy cardinal)
+          dzdxd = real(elev(1) - elev(5)) / (dist(1) + dist(5))  ! northeast-southwest (dz/dx diagonal)
+          dzdyd = real(elev(7) - elev(3)) / (dist(7) + dist(3))  ! northwest-southeast (dz/dy diagonal)
 
           ddz = [dzdxc,dzdyc,dzdxd,dzdyd]
 
-          if (sum(ddz) == 0.d0) then
+          if (sum(ddz) == 0._dp) then
 
-            slope(x0,y0) = Sd8        
+            slope(x0,y0) = Sd8
+            
+            if (slope(x0,y0) > minslope) aspect(x0,y0) = Ad8
 
           else
+          
+            ! finite difference slope calculation
 
             Sfd = sqrt(dzdxc**2 + dzdyc**2)
+            
+            ! Song and Shan (2009) weight factor
 
-            w = 0.5d0 * (sqrt(dzdxd**2 + dzdyd**2) - sqrt(dzdxc**2 + dzdyc**2))**2 / (dzdxd**2 + dzdyd**2 + dzdxc**2 + dzdyc**2)
+            w = 0.5_dp * (sqrt(dzdxd**2 + dzdyd**2) - sqrt(dzdxc**2 + dzdyc**2))**2 / (dzdxd**2 + dzdyd**2 + dzdxc**2 + dzdyc**2)
+            
+            ! final calculation of slope (Song and Shan, 2009)
 
-            slope(x0,y0) = w * Sd8 + (1.d0 - w) * Sfd
+            slope(x0,y0) = w * Sd8 + (1._dp - w) * Sfd
+            
+            !finite difference aspect
+            
+            if (slope(x0,y0) > minslope) then
+
+              Afd = 180. - (atan(dzdyc / dzdxc)) / d2r + 90. * (dzdxc / abs(dzdxc))
+
+              aspect(x0,y0) = w * Ad8 + (1. - w) * Afd
+
+            end if
 
           end if
 
-        else
+        else  ! missing some neighbor gridcells
 
           slope(x0,y0) = Sd8
+
+          aspect(x0,y0) = Ad8
 
         end if
         
@@ -486,6 +547,13 @@ do j = 1,nblky
           write(99,'(2f15.10,2i8,f9.4,9i5)')ll0,x0+srtx-1,y0+srty-1,slope(x0,y0),dem(x0,y0),elev
           
         end if
+        
+        ! write(0,*)'D8 slope',Sd8
+        ! write(0,*)'FD slope',Sfd
+        ! write(0,*)'D8 aspect',Ad8
+        ! write(0,*)'FD aspect',Afd
+        ! write(0,*)'final slope ',slope(x0,y0)
+        ! write(0,*)'final aspect',aspect(x0,y0)
         
       end do    !block x
     end do      !block y
@@ -503,6 +571,9 @@ do j = 1,nblky
     if (ncstat/=nf90_noerr) call handle_err(ncstat)    
 
     ncstat = nf90_put_var(ofid,id_slope,slope,start=[srtx_o,srty_o],count=[blklenx,blkleny])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)    
+
+    ncstat = nf90_put_var(ofid,id_aspect,aspect,start=[srtx_o,srty_o],count=[blklenx,blkleny])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)    
 
     !write(0,*)'done'

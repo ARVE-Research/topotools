@@ -1,17 +1,23 @@
 #makefile
 
-NC_LIB=/usr/local/netcdf/lib
-NC_INC=/usr/local/netcdf/include
+NC_LIB=/share1/netcdf/4.7.1-impi/lib
+NC_INC=/share1/netcdf/4.7.1-impi/include
 
 CC = icc
 FC = ifort
-LDFLAGS  = -L$(NC_LIB) -openmp
-CPPFLAGS = -I$(NC_INC)
+LDFLAGS  = -L$(NC_LIB) -qopenmp
+CPPFLAGS = -I$(NC_INC) -Difort
 
-#FCFLAGS = -debug -fpe0 -traceback -g -check -check noarg_temp_created -warn all -openmp  -openmp-report
-FCFLAGS  = -xHost -vec-report -openmp  -openmp-report
+# debugging flags gfortran
 #FCFLAGS = -ftree-vectorize -msse2 -ftree-vectorizer-verbose=2 #-fbacktrace -ggdb -g -fcheck=all -ffpe-trap=invalid,zero
-LIBS     =  -lnetcdff -lnetcdf -loverprint
+
+# optimized flags for gfortran
+#FCFLAGS = -debug -fpe0 -traceback -g -check -check noarg_temp_created -warn all -openmp  -openmp-report
+
+# optimized flags for intel ifort
+FCFLAGS  = -xHost -qopenmp -qopt-report
+
+LIBS     =  -lnetcdff -lnetcdf
 
 OBJS = overprint.o       \
        parametersmod.o   \

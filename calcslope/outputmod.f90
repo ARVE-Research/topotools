@@ -7,8 +7,7 @@ implicit none
 public :: genoutfile
 public :: putlonlat
 
-real(sp),    parameter :: missing_sp = -9999.
-integer(i2), parameter :: missing_i2 = -32768
+real(sp),    parameter :: missing = -9999.
 
 contains
 
@@ -85,7 +84,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 allocate(dimids(ndims))
 
 !----
-!lon
+! lon
 
 ncstat = nf90_def_dim(ofid,'lon',id%countx,dimid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
@@ -105,7 +104,7 @@ ncstat = nf90_put_att(ofid,varid,'actual_range',xrange)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
-!lat
+! lat
 
 ncstat = nf90_def_dim(ofid,'lat',id%county,dimid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
@@ -125,9 +124,9 @@ ncstat = nf90_put_att(ofid,varid,'actual_range',yrange)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
-!dem (lon,lat)
+! dem (lon,lat)
 
-ncstat = nf90_def_var(ofid,'elev',nf90_short,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+ncstat = nf90_def_var(ofid,'elev',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'long_name','elevation above mean sea level')
@@ -136,15 +135,14 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_put_att(ofid,varid,'units','m')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
-
 
 !----
-!slope (lon,lat)
+! slope (lon,lat)
 
 ncstat = nf90_def_var(ofid,'slope',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
@@ -155,10 +153,28 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_put_att(ofid,varid,'units','m m-1')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+! aspect (lon,lat)
+
+ncstat = nf90_def_var(ofid,'aspect',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','terrain aspect; flat ground set to missing')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','degrees_north')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
