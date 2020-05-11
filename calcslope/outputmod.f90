@@ -189,6 +189,10 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_put_att(ofid,varid,'units','index')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+ncstat = nf90_put_att(ofid,varid,'method','using GA2 algorithm from Marthews et al., HESS, 2015')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 

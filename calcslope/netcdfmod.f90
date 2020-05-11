@@ -21,11 +21,11 @@ implicit none
 !prints out text message each time an error code is returned. 
 
 integer, intent (in) :: ncstat
-    
-if(ncstat /= nf90_noerr) then 
-  write(0,*)trim(nf90_strerror(ncstat))
-  stop
-end if
+
+! --
+
+write(0,*)trim(nf90_strerror(ncstat))
+stop
 
 end subroutine handle_err
 

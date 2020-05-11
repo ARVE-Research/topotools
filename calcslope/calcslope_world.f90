@@ -127,9 +127,6 @@ real(sp) :: lnpixlen
 
 integer :: flowdir
 
-
-
-
 !--------
 ! neighbor node numbering convention used in Wilson and Gallant (Terrain Analysis, 2000) and in other papers
 
@@ -502,7 +499,7 @@ do j = 1,nblky
           
               elev(n) = dem(x,y)
 
-              dz(n) = elev(n) - dem(x0,y0)    ! uphill slopes will be negative
+              dz(n) = dem(x0,y0) - elev(n)     ! uphill slopes will be negative; convention as in Wilson and Gallant (2000)
 
               llnbr(n,:) = [lon(x),lat(y)]
 
