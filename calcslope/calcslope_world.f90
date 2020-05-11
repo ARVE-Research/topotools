@@ -6,13 +6,13 @@ use parametersmod, only : i4,sp,dp,d2r
 use netcdfmod,     only : ncstat,handle_err
 use distmod,       only : sphdist
 use coordsmod,     only : index,parsecoords
-use utilitiesmod,  only : iminloc
+use utilitiesmod,  only : iminloc,imaxloc
 use outputmod,     only : genoutfile,putlonlat
 use netcdf
 
 implicit none
 
-real(sp), parameter :: minslope = 0.005  ! minimum slope for calculating an aspect = 0.5% or 1/200 m m-1
+real(sp), parameter :: minslope = 0.001  ! minimum slope for calculating aspect and CTI: 0.1% or 1/1000 m m-1 after Marthews et al (2015)
 
 character(100) :: infile
 character(100) :: outfile
@@ -24,19 +24,23 @@ integer :: dimid
 integer :: xvarid
 integer :: yvarid
 integer :: zvarid
+integer :: favarid
 
 integer :: id_olon
 integer :: id_olat
 integer :: id_dem
 integer :: id_slope
 integer :: id_aspect
+integer :: id_cti
 
 real(dp), allocatable, dimension(:)   :: all_lon
 real(dp), allocatable, dimension(:)   :: lon
 real(dp), allocatable, dimension(:)   :: lat
 real(sp), allocatable, dimension(:,:) :: dem
+real(sp), allocatable, dimension(:,:) :: flowacc
 real(sp), allocatable, dimension(:,:) :: slope
 real(sp), allocatable, dimension(:,:) :: aspect
+real(sp), allocatable, dimension(:,:) :: cti
 
 real(dp), dimension(8) :: snbr
 real(sp), dimension(8) :: dist
@@ -63,6 +67,7 @@ real(sp), dimension(2) :: range_elv
 real(sp) :: missing
 
 logical, dimension(8) :: nbr
+logical, dimension(8) :: ucell
 
 real(dp) :: dzdxc
 real(dp) :: dzdyc
@@ -107,6 +112,23 @@ integer, dimension(1) :: dir
 
 real(sp) :: Ad8
 real(sp) :: Afd
+
+real(sp) :: cellsize_ns
+real(sp) :: cellsize_ew
+real(sp) :: pixlen
+real(sp) :: c_all
+real(sp) :: c_in
+real(sp) :: cout
+real(sp) :: cdiag
+real(sp) :: msu
+real(sp) :: dfltsink
+real(sp) :: aspec
+real(sp) :: lnpixlen
+
+integer :: flowdir
+
+
+
 
 !--------
 ! neighbor node numbering convention used in Wilson and Gallant (Terrain Analysis, 2000) and in other papers
@@ -244,6 +266,9 @@ cs(2) = min(cs(2),id%county)
 write(0,*)'chunksizes:',cs
 write(0,*)'range elv: ',range_elv
 
+ncstat = nf90_inq_varid(ifid,'flowacc',favarid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
 !---
 
 ! write(0,*)id%startx,id%countx
@@ -269,6 +294,9 @@ ncstat = nf90_inq_varid(ofid,'slope',id_slope)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_varid(ofid,'aspect',id_aspect)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'cti',id_cti)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !---
@@ -302,8 +330,10 @@ end if
 allocate(lon(0:blklenx+1))
 allocate(lat(0:blkleny+1))
 allocate(dem(0:blklenx+1,0:blkleny+1))
+allocate(flowacc(blklenx,blkleny))
 allocate(slope(blklenx,blkleny))
 allocate(aspect(blklenx,blkleny))
+allocate(cti(blklenx,blkleny))
 
 !l = 0
 
@@ -379,7 +409,7 @@ do j = 1,nblky
 
       ncstat = nf90_get_var(ifid,zvarid,dem(1:,:),start=[srtx,srty-1],count=[blklenx+1,blkleny+2])
       if (ncstat/=nf90_noerr) call handle_err(ncstat)
-
+      
     else if (srtx + blklenx + 1 > xlen) then  !at right edge of global grid, last column copied from first column in input
 
       !write(0,*)'case right edge'
@@ -416,12 +446,18 @@ do j = 1,nblky
 
     end if
     
+    ! get the flow accumulation (for calculating CTI)
+
+    ncstat = nf90_get_var(ifid,favarid,flowacc,start=[srtx,srty])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+    
     slope  = missing
     aspect = missing
+    cti = missing
 
     !calculate slopes in the block that is in the center of the superblock
     
-    !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(blklenx,blkleny,missing,dem,idx,slope,aspect,lon,lat,chunk)
+    !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(blklenx,blkleny,missing,dem,idx,slope,aspect,flowacc,cti,lon,lat,chunk)
     !$OMP DO SCHEDULE(DYNAMIC,chunk)
     
     do y0 = 1,blkleny
@@ -434,6 +470,8 @@ do j = 1,nblky
         nbr = .true.
         nsf = .false.
         
+        snbr = 0.
+        
         do n = 1,8
           
           x = x0 + idx(n,1)
@@ -443,13 +481,13 @@ do j = 1,nblky
 
         end do
         
-        if (all(nsf)) then  !all cells have the same elevation as center pixel - slope zero
-          
-          slope(x0,y0) = 0.
-          
-          cycle
-       
-        else
+!         if (all(nsf)) then  !all cells have the same elevation as center pixel - slope zero
+!           
+!           slope(x0,y0) = 0.
+!           
+!           cycle
+!        
+!         else
               
           do n = 1,8
           
@@ -464,7 +502,7 @@ do j = 1,nblky
           
               elev(n) = dem(x,y)
 
-              dz(n) = real(elev(n) - dem(x0,y0))
+              dz(n) = elev(n) - dem(x0,y0)    ! uphill slopes will be negative
 
               llnbr(n,:) = [lon(x),lat(y)]
 
@@ -479,12 +517,12 @@ do j = 1,nblky
             end if
             
           end do
-        end if
+!         end if
 
         ! D8 slope calculation
         
         Sd8 = max(maxval(snbr,mask=nbr),0._dp)
-        
+                
         ! D8 aspect
         
         dir = maxloc(snbr,mask=nbr)
@@ -542,6 +580,74 @@ do j = 1,nblky
 
         end if
         
+        ! topographic index calculations after Marthews et al., 2015 (Figure A1)
+        
+        ! part 1, contour length
+        
+        cellsize_ew = dist(2)
+        cellsize_ns = dist(8)
+        
+        pixlen = 0.5 * (cellsize_ew + cellsize_ns)  ! mean pixel side length
+        
+        lnpixlen = log(pixlen)
+
+        cdiag = 0.354 * pixlen  ! this is an estimate, would not work for very large pixels (several degrees)
+        
+        c_all = cellsize_ew + cellsize_ns + 4. * cdiag
+        
+        if (all(snbr <= 0.)) then  ! the cell is a sink or the whole neighborhood is flat
+        
+          cout = 0.
+          
+          msu = max(sum(abs(snbr)) / 8.,minslope) ! mean slope across the non-outflow contour
+          
+          if (msu > 0.) then
+          
+            dfltsink = log(flowacc(x0,y0) * 1.e6 / (2. * pixlen * msu))
+          
+            cti(x0,y0) = max(dfltsink - lnpixlen,0.)
+          
+          else
+          
+           cti(x0,y0) = missing
+
+          end if
+                     
+        else  ! normal case
+        
+          flowdir = imaxloc(snbr)
+
+          select case(flowdir)
+          case(1,3,5,7)  ! diagonal
+            cout = cdiag
+          case(2,6)      ! east or west
+            cout = 0.5 * cellsize_ew
+          case(4,8)      ! north or south
+            cout = 0.5 * cellsize_ns
+          end select
+        
+          c_in = c_all - cout
+        
+          ! part 2, specific catchment area
+        
+          aspec = flowacc(x0,y0) * 1.e6 / cout
+        
+          ! part 3, slopes
+
+          ucell = .false.
+
+          where (nbr) ucell = .true.
+        
+          ucell(flowdir) = .false.
+        
+          msu = sum(abs(snbr),mask=ucell) / count(ucell)  ! mean slope across the non-outflow contour
+        
+          ! part 4, topographic index
+          
+          cti(x0,y0) = max(log(aspec / Sd8) - lnpixlen,0.)
+
+        end if
+        
         if (slope(x0,y0) > 4.) then
 
           write(99,'(2f15.10,2i8,f9.4,9i5)')ll0,x0+srtx-1,y0+srty-1,slope(x0,y0),dem(x0,y0),elev
@@ -574,6 +680,9 @@ do j = 1,nblky
     if (ncstat/=nf90_noerr) call handle_err(ncstat)    
 
     ncstat = nf90_put_var(ofid,id_aspect,aspect,start=[srtx_o,srty_o],count=[blklenx,blkleny])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)    
+
+    ncstat = nf90_put_var(ofid,id_cti,cti,start=[srtx_o,srty_o],count=[blklenx,blkleny])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)    
 
     !write(0,*)'done'

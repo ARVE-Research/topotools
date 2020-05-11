@@ -178,6 +178,24 @@ ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
+! topographic wetness index CTI (lon,lat)
+
+ncstat = nf90_def_var(ofid,'cti',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','topographic wetness index (CTI)')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','index')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
 
 ncstat = nf90_enddef(ofid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)

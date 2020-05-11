@@ -15,7 +15,7 @@ CPPFLAGS = -I$(NC_INC) -Difort
 #FCFLAGS = -debug -fpe0 -traceback -g -check -check noarg_temp_created -warn all -openmp  -openmp-report
 
 # optimized flags for intel ifort
-FCFLAGS  = -xHost -qopenmp -qopt-report
+FCFLAGS  = -xHost -qopenmp #-qopt-report
 
 LIBS     =  -lnetcdff -lnetcdf
 
