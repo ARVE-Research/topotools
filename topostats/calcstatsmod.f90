@@ -9,10 +9,10 @@ integer(i4), parameter :: nclasses = 14
 real(sp), dimension(nclasses) :: llim
 
 type statvals
-  integer(i2) :: elev_med
-  integer(i2) :: elev_std
-  real(sp)    :: slope_med
-  real(sp)    :: slope_std
+  real(sp) :: elev_med
+  real(sp) :: elev_std
+  real(sp) :: slope_med
+  real(sp) :: slope_std
   real(sp), dimension(nclasses) :: classfrac
 end type statvals
 
@@ -22,15 +22,15 @@ contains
 
 subroutine calcstats(area,elev,slope,stats)
 
-use parametersmod, only : missing_i2,missing_sp
+use parametersmod, only : missing_sp
 use statsmod,      only : median,stdev
 
 implicit none
 
-real(sp),       dimension(:,:), intent(in)  :: area
-integer(i2),    dimension(:,:), intent(in)  :: elev
-real(sp),       dimension(:,:), intent(in)  :: slope
-type(statvals),                 intent(out) :: stats
+real(sp), dimension(:,:), intent(in)  :: area
+real(sp), dimension(:,:), intent(in)  :: elev
+real(sp), dimension(:,:), intent(in)  :: slope
+type(statvals),           intent(out) :: stats
 
 !--
 
@@ -51,14 +51,14 @@ integer :: i
 xlen = size(elev,dim=1)
 ylen = size(elev,dim=2)
 
-nv = count(elev /= missing_i2)
+nv = count(elev /= missing_sp)
 
 allocate(blockvect(nv))
 allocate(areavect(nv))
 
 allocate(valid(xlen,ylen))
 
-where (elev /= missing_i2)
+where (elev /= missing_sp)
   valid = .true.
 elsewhere
   valid = .false.
@@ -66,11 +66,11 @@ end where
 
 !elevation
 
-blockvect = pack(real(elev),mask=valid)
+blockvect = pack(elev,mask=valid)
 
-stats%elev_med = nint(median(blockvect))
+stats%elev_med = median(blockvect)
 
-stats%elev_std = nint(10.*stdev(blockvect))
+stats%elev_std = 10.*stdev(blockvect)
 
 !slope
 

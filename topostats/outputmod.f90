@@ -146,7 +146,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 !----
 !elevation (lon,lat)
 
-ncstat = nf90_def_var(ofid,'elev',nf90_short,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+ncstat = nf90_def_var(ofid,'elev',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'long_name','median elevation above mean sea level')
@@ -155,10 +155,10 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_put_att(ofid,varid,'units','m')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
@@ -182,7 +182,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 !----
 !standard deviation of elevation (lon,lat)
 
-ncstat = nf90_def_var(ofid,'elev_stdev',nf90_short,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+ncstat = nf90_def_var(ofid,'elev_stdev',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'long_name','standard deviation of elevation')
@@ -191,10 +191,10 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_put_att(ofid,varid,'units','m')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
@@ -271,11 +271,10 @@ ncstat = nf90_put_var(ofid,id_olon,lon,start=[srtx])
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_var(ofid,id_olat,lat,start=[srty])
-if (ncstat/=nf90_noerr) call handle_err(ncstat)    
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-end subroutine putlonlat 
+end subroutine putlonlat
 
 !-------------------------------------------------------------------------------------------------
 
 end module outputmod
-

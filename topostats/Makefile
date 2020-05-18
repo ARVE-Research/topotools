@@ -1,19 +1,20 @@
 #makefile
 
-NC_LIB=/usr/local/netcdf/lib
-NC_INC=/usr/local/netcdf/include
+NC_LIB=/share1/netcdf/4.7.1-impi/lib
+NC_INC=/share1/netcdf/4.7.1-impi/include
 
 CC = icc
 FC = ifort
-LDFLAGS  = -L$(NC_LIB) -openmp
-CPPFLAGS = -I$(NC_INC)
+LDFLAGS  = -L$(NC_LIB) -qopenmp
+CPPFLAGS = -I$(NC_INC) -Difort
 
 #FCFLAGS = -debug -fpe0 -traceback -g -check -check noarg_temp_created -warn all -openmp  -openmp-report
-FCFLAGS  = -xHost -vec-report -openmp  -openmp-report -warn all
-LIBS     = -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lnetcdff -lnetcdf -loverprint
+FCFLAGS  = -xHost -qopenmp #-xHost -vec-report -openmp  -openmp-report -warn all
+LIBS     = -lnetcdff -lnetcdf #-lmkl_intel_lp64 -lmkl_sequential -lmkl_core -loverprint
 
 
-OBJS = parametersmod.o  \
+OBJS = overprint.o			\
+			 parametersmod.o  \
        netcdfmod.o      \
        sortmod.o        \
        utilitiesmod.o   \
@@ -39,7 +40,7 @@ all::	topostats
 topostats:  $(OBJS)
 	$(FC) -o topostats $(OBJS) $(LDFLAGS) $(LIBS)
 
-clean::	
+clean::
 	-rm topostats *.mod *.o
 
 
