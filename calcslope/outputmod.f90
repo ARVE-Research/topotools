@@ -200,6 +200,60 @@ ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
+! curvature_profile (lon,lat)
+
+ncstat = nf90_def_var(ofid,'curvature_profile',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','curvature_profile')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','radians_per_m')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+! curvature_plan (lon,lat)
+
+ncstat = nf90_def_var(ofid,'curvature_plan',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','curvature_plan')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','radians_per_m')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+! curvature_total (lon,lat)
+
+ncstat = nf90_def_var(ofid,'curvature_total',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','curvature_total')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','radians_per_m')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
 
 ncstat = nf90_enddef(ofid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
@@ -231,11 +285,10 @@ ncstat = nf90_put_var(ofid,id_olon,lon,start=[srtx])
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_var(ofid,id_olat,lat,start=[srty])
-if (ncstat/=nf90_noerr) call handle_err(ncstat)    
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-end subroutine putlonlat 
+end subroutine putlonlat
 
 !-------------------------------------------------------------------------------------------------
 
 end module outputmod
-

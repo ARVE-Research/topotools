@@ -32,6 +32,9 @@ integer :: id_dem
 integer :: id_slope
 integer :: id_aspect
 integer :: id_cti
+integer :: id_curvature_profile
+integer :: id_curvature_plan
+integer :: id_curvature_total
 
 real(dp), allocatable, dimension(:)   :: all_lon
 real(dp), allocatable, dimension(:)   :: lon
@@ -41,6 +44,9 @@ real(sp), allocatable, dimension(:,:) :: flowacc
 real(sp), allocatable, dimension(:,:) :: slope
 real(sp), allocatable, dimension(:,:) :: aspect
 real(sp), allocatable, dimension(:,:) :: cti
+real(sp), allocatable, dimension(:,:) :: curvature_profile
+real(sp), allocatable, dimension(:,:) :: curvature_plan
+real(sp), allocatable, dimension(:,:) :: curvature_total
 
 real(dp), dimension(8) :: snbr
 real(sp), dimension(8) :: dist
@@ -73,6 +79,11 @@ real(dp) :: dzdxc
 real(dp) :: dzdyc
 real(dp) :: dzdxd
 real(dp) :: dzdyd
+real(dp) :: d2zdx2
+real(dp) :: d2zdy2
+real(dp) :: d2zdxdy
+real(dp) :: p
+real(dp) :: q
 
 real(dp) :: Sd8
 real(dp) :: Sfd
@@ -160,13 +171,13 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_dimid(ifid,'lon',dimid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
-  
+
 ncstat = nf90_inquire_dimension(ifid,dimid,len=xlen)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_dimid(ifid,'lat',dimid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
-  
+
 ncstat = nf90_inquire_dimension(ifid,dimid,len=ylen)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -176,7 +187,7 @@ write(0,*)'infile size: ',xlen,ylen
 
 ncstat = nf90_inq_varid(ifid,'lon',xvarid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
-  
+
 ncstat = nf90_get_att(ifid,xvarid,'valid_range',lonrange)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -296,6 +307,16 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_inq_varid(ofid,'cti',id_cti)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+ncstat = nf90_inq_varid(ofid,'curvature_profile',id_curvature_profile)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'curvature_plan',id_curvature_plan)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'curvature_total',id_curvature_total)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+
 !---
 !divide desired job up into blocks depending on the input chunksize
 
@@ -304,7 +325,7 @@ if (mod(id%countx,cs(1)) == 0) then
 else
   nblkx = id%countx / cs(1) + 1
 end if
-  
+
 if (mod(id%county,cs(2)) == 0) then
   nblky = id%county / cs(2)
 else
@@ -331,23 +352,26 @@ allocate(flowacc(blklenx,blkleny))
 allocate(slope(blklenx,blkleny))
 allocate(aspect(blklenx,blkleny))
 allocate(cti(blklenx,blkleny))
+allocate(curvature_profile(blklenx, blkleny))
+allocate(curvature_plan(blklenx, blkleny))
+allocate(curvature_total(blklenx, blkleny))
 
 !l = 0
 
 do j = 1,nblky
-  
+
   srty = id%starty + (j-1) * blkleny
- 
+
   srty_o = 1 + (j-1) * blkleny
 
   write(status_line,'(a,i5,a,i5)')' working on row: ',j,' of ',nblky
   call overprint(trim(status_line))
-  
+
   !--------------------------------------
   ! get latitude
-  
+
   if (srty == 1) then  !at bottom edge of global grid
-    
+
     !ncstat = nf90_get_var(ifid,yvarid,lat(0),start=[srty+1])
     !if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -371,15 +395,15 @@ do j = 1,nblky
     cycle !skip it for now (no land anyway)
 
   else  !normal situation
-    
+
     ncstat = nf90_get_var(ifid,yvarid,lat,start=[srty-1])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
   end if
-  
+
   !--------------------------------------
   ! get longitude
-  
+
   do i = 1,nblkx
 
     srtx_o = 1 + (i-1) * blklenx
@@ -390,14 +414,14 @@ do j = 1,nblky
 
     !write(status_line,'(a,3i5,4i8)')' working on: ',l,i,j,srtx,xlen,srty,ylen
     !call overprint(trim(status_line))
-    
+
     if (srtx == 1) then  !at left edge of global grid, first column copied from last column in input
-      
+
       !write(0,*)'case left edge'
-      
+
       ncstat = nf90_get_var(ifid,xvarid,lon(0),start=[xlen])
       if (ncstat/=nf90_noerr) call handle_err(ncstat)
-        
+
       ncstat = nf90_get_var(ifid,xvarid,lon(1:),start=[srtx],count=[blklenx+1])
       if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -406,11 +430,11 @@ do j = 1,nblky
 
       ncstat = nf90_get_var(ifid,zvarid,dem(1:,:),start=[srtx,srty-1],count=[blklenx+1,blkleny+2])
       if (ncstat/=nf90_noerr) call handle_err(ncstat)
-      
+
     else if (srtx + blklenx + 1 > xlen) then  !at right edge of global grid, last column copied from first column in input
 
       !write(0,*)'case right edge'
-      
+
       ncstat = nf90_get_var(ifid,xvarid,lon(blklenx+1),start=[1])
       if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -424,7 +448,7 @@ do j = 1,nblky
       if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     else  !normal situation
-    
+
       ncstat = nf90_get_var(ifid,xvarid,lon,start=[srtx-1])
       if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -432,7 +456,7 @@ do j = 1,nblky
       if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     end if
-        
+
     where (dem < range_elv(1)) dem = missing
 
     if (all(dem == missing)) then
@@ -442,61 +466,64 @@ do j = 1,nblky
       cycle
 
     end if
-    
+
     ! get the flow accumulation (for calculating CTI)
 
     ncstat = nf90_get_var(ifid,favarid,flowacc,start=[srtx,srty])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
-    
+
     slope  = missing
     aspect = missing
     cti = missing
+    curvature_profile = missing
+    curvature_plan = missing
+    curvature_total = missing
 
     !calculate slopes in the block that is in the center of the superblock
-    
-    !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(blklenx,blkleny,missing,dem,idx,slope,aspect,flowacc,cti,lon,lat,chunk)
+
+    !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(blklenx,blkleny,missing,dem,idx,slope,aspect,flowacc,cti,curvature_profile,curvature_plan,curvature_total,lon,lat,chunk)
     !$OMP DO SCHEDULE(DYNAMIC,chunk)
-    
+
     do y0 = 1,blkleny
       do x0 = 1,blklenx
-        
+
         if (dem(x0,y0) == missing) cycle
-                
+
         ll0 = [lon(x0),lat(y0)]
-        
+
         nbr = .true.
         nsf = .false.
-        
+
         snbr = 0.
-        
+
         do n = 1,8
-          
+
           x = x0 + idx(n,1)
           y = y0 + idx(n,2)
-            
+
           if (dem(x,y) == dem(x0,y0)) nsf(n) = .true.
 
         end do
-        
+
 !         if (all(nsf)) then  !all cells have the same elevation as center pixel - slope zero
-!           
+!
 !           slope(x0,y0) = 0.
-!           
+!
 !           cycle
-!        
+!
 !         else
-              
+
           do n = 1,8
-          
+
             x = x0 + idx(n,1)
             y = y0 + idx(n,2)
-            
+
             if (dem(x,y) == missing) then    ! or otherwise missing neighbor
 
               nbr(n) = .false.
-           
+
             else
-          
+
               elev(n) = dem(x,y)
 
               dz(n) = dem(x0,y0) - elev(n)     ! uphill slopes will be negative; convention as in Wilson and Gallant (2000)
@@ -512,22 +539,22 @@ do j = 1,nblky
               snbr(n) = dz(n) / dist(n)
 
             end if
-            
+
           end do
 !         end if
 
         ! D8 slope calculation
-        
+
         Sd8 = max(maxval(snbr,mask=nbr),0._dp)
-                
+
         ! D8 aspect
-        
+
         dir = maxloc(snbr,mask=nbr)
 
         Ad8 = 45. * real(dir(1))
 
-        if (all(nbr)) then  
-        
+        if (all(nbr)) then
+
           ! all neighbor gridcells are present so we can calculate finite differences
 
           dzdxc = real(elev(2) - elev(6)) / (dist(2) + dist(6))  ! east-west   (dz/dx cardinal)
@@ -537,28 +564,61 @@ do j = 1,nblky
 
           ddz = [dzdxc,dzdyc,dzdxd,dzdyd]
 
+          ! second derivatives for curvature calculations
+
+          d2zdx2 = real((elev(2) - 2 * elev(9) + elev(6)) / (((dist(2) + dist(6)) / 2) ** 2))
+          d2zdy2 = real((elev(8) - 2 * elev(9) + elev(4)) / (((dist(8) + dist(4)) / 2) ** 2))
+          d2zdxdy = real((elev(1) + elev(5) - elev(7) - elev(3)) / (((dist(1) + dist(5) + dist(7) + dist(3)) / 4) ** 2) / 4)
+
+          p = (dzdxc ** 2) + (dzdyc ** 2)       !TAPES-G formulea from Wilson & Gallant p.57
+          q = p + 1._dp
+
+          curvature_profile(x0,y0) = ((d2zdx2 * (dzdxc ** 2)) + (2 * d2zdxdy * dzdxc * dzdyc) + (d2zdy2 * (dzdyc ** 2))) / (p * (q ** 1.5)) !Profile curvature
+          curvature_plan(x0,y0) = ((d2zdx2 * dzdyc ** 2) - (2 * d2zdxdy * dzdxc * dzdyc) + (d2zdy2 * dzdxc ** 2)) / (p ** 1.5) !Plan curvature
+          curvature_total(x0,y0) = ((d2zdx2 ** 2) + (2 * d2zdxdy ** 2) + (d2zdy2 ** 2)) ! Formula for total curvature Wilson & Gallant p.57
+          !Kt = ((d2zdx2 * dzdyc ** 2) - (2 * d2zdxdy * dzdxc * dzdyc) + (d2zdy2 * dzdxc ** 2)) / (p * q ** 0.5) !Tangent curvature
+
+          !curvature(x0,y0) = curvature(x0,y0) * 100 !Adjust to randians per 100m
+
+          ! --
+
           if (sum(ddz) == 0._dp) then
 
-            slope(x0,y0) = Sd8
-            
-            if (slope(x0,y0) > minslope) aspect(x0,y0) = Ad8
+            slope(x0,y0) = Sd8 ! Sd8 = 0 if land is flat, which is the case for inland waterbodies
+
+            if(slope(x0,y0) == 0) then
+
+              curvature_profile(x0,y0) = missing
+              curvature_plan(x0,y0) = missing
+              curvature_total(x0,y0) = missing
+
+            end if
+
+            if (slope(x0,y0) > minslope) then
+
+              aspect(x0,y0) = Ad8
+
+              ! Aspect will be "missing" if slope(x0,y0) < minslope,
+              ! which occur on inland waterbodies as slope = 0 and there is no operation below to replace "missing" value
+
+            end if
 
           else
-          
+
             ! finite difference slope calculation
 
             Sfd = sqrt(dzdxc**2 + dzdyc**2)
-            
+
             ! Song and Shan (2009) weight factor
 
             w = 0.5_dp * (sqrt(dzdxd**2 + dzdyd**2) - sqrt(dzdxc**2 + dzdyc**2))**2 / (dzdxd**2 + dzdyd**2 + dzdxc**2 + dzdyc**2)
-            
+
             ! final calculation of slope (Song and Shan, 2009)
 
             slope(x0,y0) = w * Sd8 + (1._dp - w) * Sfd
-            
+
             !finite difference aspect
-            
+
             if (slope(x0,y0) > minslope) then
 
               Afd = 180. - (atan(dzdyc / dzdxc)) / d2r + 90. * (dzdxc / abs(dzdxc))
@@ -569,49 +629,54 @@ do j = 1,nblky
 
           end if
 
+
         else  ! missing some neighbor gridcells
 
           slope(x0,y0) = Sd8
 
           aspect(x0,y0) = Ad8
 
+          curvature_profile(x0,y0) = missing
+          curvature_plan(x0,y0) = missing
+          curvature_total(x0,y0) = missing
+
         end if
-        
+
         ! topographic index calculations after Marthews et al., 2015 (Figure A1)
-        
+
         ! part 1, contour length
-        
+
         cellsize_ew = dist(2)
         cellsize_ns = dist(8)
-        
+
         pixlen = 0.5 * (cellsize_ew + cellsize_ns)  ! mean pixel side length
-        
+
         lnpixlen = log(pixlen)
 
         cdiag = 0.354 * pixlen  ! this is an estimate, would not work for very large pixels (several degrees)
-        
+
         c_all = cellsize_ew + cellsize_ns + 4. * cdiag
-        
-        if (all(snbr <= 0.)) then  ! the cell is a sink or the whole neighborhood is flat
-        
+
+        if (all(snbr <= 0.)) then  ! the cell is a sink or the whole neighborhood is flat (or if its water surface, then all(snbr == 0))
+
           cout = 0.
-          
+
           msu = max(sum(abs(snbr)) / 8.,minslope) ! mean slope across the non-outflow contour
-          
+
           if (msu > 0.) then
-          
+
             dfltsink = log(flowacc(x0,y0) * 1.e6 / (2. * pixlen * msu))
-          
+
             cti(x0,y0) = max(dfltsink - lnpixlen,0.)
-          
+
           else
-          
-           cti(x0,y0) = missing
+
+           cti(x0,y0) = missing ! Will never be activated because minslope = 0.001?
 
           end if
-                     
+
         else  ! normal case
-        
+
           flowdir = imaxloc(snbr)
 
           select case(flowdir)
@@ -622,65 +687,74 @@ do j = 1,nblky
           case(4,8)      ! north or south
             cout = 0.5 * cellsize_ns
           end select
-        
+
           c_in = c_all - cout
-        
+
           ! part 2, specific catchment area
-        
+
           aspec = flowacc(x0,y0) * 1.e6 / cout
-        
+
           ! part 3, slopes
 
           ucell = .false.
 
           where (nbr) ucell = .true.
-        
+
           ucell(flowdir) = .false.
-        
+
           msu = sum(abs(snbr),mask=ucell) / count(ucell)  ! mean slope across the non-outflow contour
-        
+
           ! part 4, topographic index
-          
+
           cti(x0,y0) = max(log(aspec / Sd8) - lnpixlen,0.)
 
         end if
-        
+
         if (slope(x0,y0) > 4.) then
 
           write(99,'(2f15.10,2i8,f9.4,9i5)')ll0,x0+srtx-1,y0+srty-1,slope(x0,y0),dem(x0,y0),elev
-          
+
         end if
-        
+
         ! write(0,*)'D8 slope',Sd8
         ! write(0,*)'FD slope',Sfd
         ! write(0,*)'D8 aspect',Ad8
         ! write(0,*)'FD aspect',Afd
         ! write(0,*)'final slope ',slope(x0,y0)
         ! write(0,*)'final aspect',aspect(x0,y0)
-        
+
       end do    !block x
     end do      !block y
-    
+
     !$OMP END DO NOWAIT
     !$OMP END PARALLEL
 
     !write out block
-    
+
     !write(0,*)'writing'
-    
+
     call putlonlat(ofid,id_olon,id_olat,lon(1:blklenx),lat(1:blkleny),srtx_o,srty_o)
 
     ncstat = nf90_put_var(ofid,id_dem,dem(1:blklenx,1:blkleny),start=[srtx_o,srty_o],count=[blklenx,blkleny])
-    if (ncstat/=nf90_noerr) call handle_err(ncstat)    
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     ncstat = nf90_put_var(ofid,id_slope,slope,start=[srtx_o,srty_o],count=[blklenx,blkleny])
-    if (ncstat/=nf90_noerr) call handle_err(ncstat)    
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     ncstat = nf90_put_var(ofid,id_aspect,aspect,start=[srtx_o,srty_o],count=[blklenx,blkleny])
-    if (ncstat/=nf90_noerr) call handle_err(ncstat)    
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     ncstat = nf90_put_var(ofid,id_cti,cti,start=[srtx_o,srty_o],count=[blklenx,blkleny])
-    if (ncstat/=nf90_noerr) call handle_err(ncstat)    
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_curvature_profile,curvature_profile,start=[srtx_o,srty_o],count=[blklenx,blkleny])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_curvature_plan,curvature_plan,start=[srtx_o,srty_o],count=[blklenx,blkleny])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_curvature_total,curvature_total,start=[srtx_o,srty_o],count=[blklenx,blkleny])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     !write(0,*)'done'
 
