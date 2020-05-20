@@ -621,9 +621,17 @@ do j = 1,nblky
 
             if (slope(x0,y0) > minslope) then
 
-              Afd = 180. - (atan(dzdyc / dzdxc)) / d2r + 90. * (dzdxc / abs(dzdxc))
+              if (dzdxc == 0.) then !Avoid returning NaN
 
-              aspect(x0,y0) = w * Ad8 + (1. - w) * Afd
+                aspect(x0,y0) = Ad8
+
+              else
+
+                Afd = 180. - (atan(dzdyc / dzdxc)) / d2r + 90. * (dzdxc / abs(dzdxc))
+
+                aspect(x0,y0) = w * Ad8 + (1. - w) * Afd
+
+              end if
 
             end if
 
