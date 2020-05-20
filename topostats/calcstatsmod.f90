@@ -161,7 +161,7 @@ end subroutine calcstats
 subroutine calcstats_aspect(area,elev,slope,aspect,cti,stats,llim)
 
 use parametersmod, only : missing_sp
-use statsmod,      only : median,stdev,vector_mean
+use statsmod,      only : median,stdev,vector_mean,vector_stdev
 
 implicit none
 
@@ -277,7 +277,7 @@ validarea = sum(areavect)
 
 stats%aspect_med = vector_mean(blockvect)
 
-stats%aspect_std = stdev(blockvect)
+stats%aspect_std = vector_stdev(blockvect)
 
 
   !first aspect class

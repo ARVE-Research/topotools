@@ -129,11 +129,59 @@ real(sp) function vector_mean(vals)
 
   vector_mean = atan2(sin_sum, cos_sum)
 
-  vector_mean = vector_mean * r2d + 180.
+  vector_mean = vector_mean * r2d
 
-  vector_mean = max(vector_mean, 0.) !Correct for rounding error
+  !---
+
+  if (vector_mean >= 0. .and. vector_mean <= 90.) then
+
+    vector_mean = 90. - vector_mean
+
+  else if (vector_mean > 90. .and. vector_mean <= 180.) then
+
+    vector_mean = 450. - vector_mean
+
+  else if (vector_mean < 0.) then
+
+    vector_mean = 90 - vector_mean
+
+  end if
+
+  !---
+
+  !vector_mean = max(vector_mean, 0.) !Correct for rounding error
 
 end function vector_mean
+
+!-----------
+
+real(sp) function vector_stdev(vals)
+
+  implicit none
+
+  real(sp), dimension(:), intent(in) :: vals
+
+  integer(i4) :: n
+
+  real(sp) :: rn
+  real(sp) :: mean
+
+  real(sp) :: sin_sum
+  real(sp) :: cos_sum
+
+  n = size(vals)
+
+  rn = 1. / real(n)
+
+  sin_sum = sum(sin(vals * d2r))
+
+  cos_sum = sum(cos(vals * d2r))
+
+  mean = rn * (max((atan2(sin_sum, cos_sum) * r2d + 180.), 0.))
+
+  vector_stdev = sqrt(rn * sum((vals - mean)**2))
+
+end function vector_stdev
 
 !-----------
 
