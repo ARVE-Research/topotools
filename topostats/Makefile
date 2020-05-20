@@ -8,8 +8,8 @@ FC = ifort
 LDFLAGS  = -L$(NC_LIB) -qopenmp
 CPPFLAGS = -I$(NC_INC) -Difort
 
-#FCFLAGS = -debug -fpe0 -traceback -g -check -check noarg_temp_created -warn all -openmp  -openmp-report
-FCFLAGS  = -xHost -qopenmp #-xHost -vec-report -openmp  -openmp-report -warn all
+FCFLAGS = -debug -fpe0 -traceback -g -check -check noarg_temp_created -warn all #-qopenmp
+#FCFLAGS  = -xHost -qopenmp #-xHost -vec-report -openmp  -openmp-report -warn all
 LIBS     = -lnetcdff -lnetcdf #-lmkl_intel_lp64 -lmkl_sequential -lmkl_core -loverprint
 
 
@@ -22,7 +22,9 @@ OBJS = overprint.o			\
        calcstatsmod.o   \
        coordsmod.o      \
        outputmod.o      \
+			 calcfracmod.o    \
        topostats.o
+
 
 .SUFFIXES: .o .f90 .f .mod
 

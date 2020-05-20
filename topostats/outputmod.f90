@@ -21,14 +21,15 @@ use netcdf
 use typesizes
 use netcdfmod,     only : ncstat,handle_err
 use coordsmod,     only : index
+use calcstatsmod,  only : classbin
 
 implicit none
 
-character(*), intent(in)  :: outfile
-type(index),  intent(in)  :: id
-integer, dimension(:), intent(in) :: chunks
-integer,      intent(out) :: ofid
-real(sp), dimension(:), intent(in) :: llim
+character(*),               intent(in)  :: outfile
+type(index),                intent(in)  :: id
+type(classbin),             intent(in)  :: llim
+integer,      dimension(:), intent(in)  :: chunks
+integer,                    intent(out) :: ofid
 
 !local variables
 
@@ -41,18 +42,23 @@ integer(i4) :: varid
 real(dp), dimension(2) :: xrange
 real(dp), dimension(2) :: yrange
 
-integer :: nclass
+integer :: nclass_slope
+integer :: nclass_aspect
+integer :: nclass_cti
 
 character(8)  :: today
 character(10) :: now
 
 integer(i4), allocatable, dimension(:) :: dimids
+integer(i4),              dimension(3) :: dims
 
-integer, parameter :: ndims = 3
+integer, parameter :: ndims = 5
 
 !---
 
-nclass = size(llim)
+nclass_slope  = size(llim%slope_bin)
+nclass_aspect = size(llim%aspect_bin)
+nclass_cti    = size(llim%cti_bin)
 
 xrange = [id%minlon,id%maxlon]
 yrange = [id%minlat,id%maxlat]
@@ -129,7 +135,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 !----
 !slope classes
 
-ncstat = nf90_def_dim(ofid,'slopeclass',nclass,dimid)
+ncstat = nf90_def_dim(ofid,'slopeclass',nclass_slope,dimid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 dimids(3) = dimid
@@ -141,6 +147,40 @@ ncstat = nf90_put_att(ofid,varid,'long_name','lower limit of slope class thresho
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','m m-1')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+!aspect classes
+
+ncstat = nf90_def_dim(ofid,'aspectclass',nclass_aspect,dimid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+dimids(4) = dimid
+
+ncstat = nf90_def_var(ofid,'aspectclass',nf90_float,dimid,varid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','lower limit of aspect class threshold')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','degrees from north')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+!cti classes
+
+ncstat = nf90_def_dim(ofid,'cticlass',nclass_cti,dimid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+dimids(5) = dimid
+
+ncstat = nf90_def_var(ofid,'cticlass',nf90_float,dimid,varid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','lower limit of cti class threshold')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','index')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
@@ -171,6 +211,42 @@ ncstat = nf90_put_att(ofid,varid,'long_name','median terrain slope')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','m m-1')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+!aspect (lon,lat)
+
+ncstat = nf90_def_var(ofid,'aspect',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','median terrain aspect')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','degrees from north')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+!cti (lon,lat)
+
+ncstat = nf90_def_var(ofid,'cti',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','median topographic wetness index (CTI)')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','index')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
@@ -222,12 +298,88 @@ ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
+!standard deviation of aspect (lon,lat)
+
+ncstat = nf90_def_var(ofid,'aspect_stdev',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','standard deviation of terrain aspect')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','degrees_north')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+!standard deviation of cti (lon,lat)
+
+ncstat = nf90_def_var(ofid,'cti_stdev',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','standard deviation of topographic wetness index (CTI)')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','index')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
 !slope class fraction (lon,lat,slopeclass)
 
-ncstat = nf90_def_var(ofid,'classfrac',nf90_float,dimids,varid,chunksizes=chunks,deflate_level=1,shuffle=.true.)
+ncstat = nf90_def_var(ofid,'slope_classfrac',nf90_float,dimids(1:3),varid,chunksizes=chunks,deflate_level=1,shuffle=.true.)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'long_name','fraction of the gridcell in each slope class')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','fraction')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+!aspect class fraction (lon,lat,aspectclass)
+
+dims = [dimids(1), dimids(2), dimids(4)]
+
+ncstat = nf90_def_var(ofid,'aspect_classfrac',nf90_float,dims,varid,chunksizes=chunks,deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','fraction of the gridcell in each aspect class')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','fraction')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+!cti class fraction (lon,lat,cticlass)
+
+dims = [dimids(1), dimids(2), dimids(5)]
+
+ncstat = nf90_def_var(ofid,'cti_classfrac',nf90_float,dims,varid,chunksizes=chunks,deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','fraction of the gridcell in each topographic wetness index class')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','fraction')
