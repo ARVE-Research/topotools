@@ -310,8 +310,8 @@ nblkchk = schunk_out(1:2) / sblock_out
 
 write(0,*)'num outblocks per chunk:',nblkchk
 
-write(0,*)'press return to continue'
-read(*,*)
+!write(0,*)'press return to continue'
+!read(*,*)
 
 !---
 !generate output file

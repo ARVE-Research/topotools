@@ -21,7 +21,7 @@ contains
 !-------------------------------------------------------------------------------------------------
 
 function sphdist_scalar(p0,p1)
-  
+
 !spherical distance calculation; returns distance between lat-lon points in meters
 !spherical approximation form of the Vincenty formula
 !coded from formula in Wikipedia article "Great-circle distance"

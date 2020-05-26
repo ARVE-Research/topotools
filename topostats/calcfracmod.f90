@@ -22,13 +22,15 @@ integer :: i
     llim%slope_bin(i) = 10.**(0.2 * real(i-1) - 2.4)
   end do
 
-  !Aspect bin
+  !Aspect bin (by 8 compass directions)
 
-  do i = 1, nclasses_aspect
-    llim%aspect_bin(i) = real((360/nclasses_aspect) * i)
+  llim%aspect_bin(1) = 22.5
+
+  do i = 2, nclasses_aspect
+    llim%aspect_bin(i) = real(22.5 + 45. * (i-1))
   end do
 
-  !CTI bin
+  !CTI bin (Fig.2 in Marthews et al. 2015)
 
   do i = 1, 10
     llim%cti_bin(i) = real(i)

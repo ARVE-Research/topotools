@@ -1,6 +1,6 @@
 module statsmod
 
-use parametersmod, only : i2,i4,sp,dp,d2r,r2d
+use parametersmod, only : i2,i4,sp,dp,d2r,r2d,missing_sp
 
 implicit none
 
@@ -114,48 +114,9 @@ end function stdev_sp
 
 !-----------
 
-real(sp) function vector_mean(vals)
+real(sp) function circle_mean(vals)
 
-  implicit none
-
-  real(sp), dimension(:), intent(in) :: vals
-
-  real(sp) :: sin_sum
-  real(sp) :: cos_sum
-
-  sin_sum = sum(sin(vals * d2r))
-
-  cos_sum = sum(cos(vals * d2r))
-
-  vector_mean = atan2(sin_sum, cos_sum)
-
-  vector_mean = vector_mean * r2d
-
-  !---
-
-  if (vector_mean >= 0. .and. vector_mean <= 90.) then
-
-    vector_mean = 90. - vector_mean
-
-  else if (vector_mean > 90. .and. vector_mean <= 180.) then
-
-    vector_mean = 450. - vector_mean
-
-  else if (vector_mean < 0.) then
-
-    vector_mean = 90 - vector_mean
-
-  end if
-
-  !---
-
-  !vector_mean = max(vector_mean, 0.) !Correct for rounding error
-
-end function vector_mean
-
-!-----------
-
-real(sp) function vector_stdev(vals)
+  !Reference: (Wikipedia) Mean of circular quantities
 
   implicit none
 
@@ -163,25 +124,86 @@ real(sp) function vector_stdev(vals)
 
   integer(i4) :: n
 
-  real(sp) :: rn
-  real(sp) :: mean
+  real(sp) :: sin_sum
+  real(sp) :: cos_sum
+
+  n = size(vals)
+
+  sin_sum = sum(sin(vals * d2r))
+
+  cos_sum = sum(cos(vals * d2r))
+
+  !---
+
+  if (sin_sum == 0. .and. cos_sum == 0.) then ! all vectors cancalled out, atan2(0,0) is undefined
+
+    circle_mean = missing_sp
+
+  else
+
+    circle_mean = atan2((sin_sum/n), (cos_sum/n))
+
+    circle_mean = circle_mean * r2d
+
+    !---
+
+    if (circle_mean < 0.) then
+
+      circle_mean = circle_mean + 360. !Convert from atan2 to degrees north
+
+    end if
+
+    !---
+
+  end if
+
+  !circle_mean = max(circle_mean, 0.) !Correct for rounding error
+
+end function circle_mean
+
+!-----------
+
+real(sp) function circle_stdev(vals)
+
+  ! Reference: (Wikipedia) Directional statistics & wrapped normal distribution; https://ncss-wpengine.netdna-ssl.com/wp-content/themes/ncss/pdf/Procedures/NCSS/Circular_Data_Analysis.pdf
+
+  implicit none
+
+  real(sp), dimension(:), intent(in) :: vals
+
+  integer(i4) :: n
+  real(sp) :: r
 
   real(sp) :: sin_sum
   real(sp) :: cos_sum
 
   n = size(vals)
 
-  rn = 1. / real(n)
-
   sin_sum = sum(sin(vals * d2r))
 
   cos_sum = sum(cos(vals * d2r))
 
-  mean = rn * (max((atan2(sin_sum, cos_sum) * r2d + 180.), 0.))
+  r = sqrt((sin_sum ** 2) + (cos_sum ** 2))
 
-  vector_stdev = sqrt(rn * sum((vals - mean)**2))
+  !---
 
-end function vector_stdev
+  if (r == 0.) then
+
+    circle_stdev = missing_sp
+
+  else
+
+    r = -2. * log(r / real(n))
+
+    r = max(r, 0.) !Correct for rounding error
+
+    r = sqrt(r) * r2d
+
+    circle_stdev = r
+
+  end if
+
+end function circle_stdev
 
 !-----------
 

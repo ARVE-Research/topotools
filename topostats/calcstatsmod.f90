@@ -5,7 +5,7 @@ use parametersmod, only : i2,i4,sp,dp
 implicit none
 
 integer(i4), parameter :: nclasses_slope  = 14
-integer(i4), parameter :: nclasses_aspect = 12
+integer(i4), parameter :: nclasses_aspect = 8
 integer(i4), parameter :: nclasses_cti    = 13
 
 type classbin
@@ -161,7 +161,7 @@ end subroutine calcstats
 subroutine calcstats_aspect(area,elev,slope,aspect,cti,stats,llim)
 
 use parametersmod, only : missing_sp
-use statsmod,      only : median,stdev,vector_mean,vector_stdev
+use statsmod,      only : median,stdev,circle_mean,circle_stdev
 
 implicit none
 
@@ -275,14 +275,14 @@ validarea = sum(areavect)
 !write(0,*) 'aspect values:', aspect
 !write(0,*) 'valid area: ', validarea
 
-stats%aspect_med = vector_mean(blockvect)
+stats%aspect_med = circle_mean(blockvect)
 
-stats%aspect_std = vector_stdev(blockvect)
+stats%aspect_std = circle_stdev(blockvect)
 
 
   !first aspect class
 
-  stats%classfrac_aspect(1) = sum(areavect,mask=blockvect >= 0. .and. blockvect <= llim%aspect_bin(1)) / validarea
+  stats%classfrac_aspect(1) = (sum(areavect,mask=blockvect >= 0. .and. blockvect <= llim%aspect_bin(1)) + sum(areavect,mask=blockvect > llim%aspect_bin(8) .and. blockvect <= 360.)) / validarea
 
   !all other classes
 
@@ -311,6 +311,9 @@ allocate(blockvect(nv))
 blockvect = pack(cti,mask=valid)
 
 stats%cti_med = median(blockvect)
+
+!print*, '                 '
+!print*, nv, blockvect, slope
 
 stats%cti_std = stdev(blockvect)
 

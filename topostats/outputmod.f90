@@ -163,7 +163,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_put_att(ofid,varid,'long_name','lower limit of aspect class threshold')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'units','degrees from north')
+ncstat = nf90_put_att(ofid,varid,'units','degrees_north')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
@@ -228,7 +228,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_put_att(ofid,varid,'long_name','median terrain aspect')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'units','degrees from north')
+ncstat = nf90_put_att(ofid,varid,'units','degrees_north')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)

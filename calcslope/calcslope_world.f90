@@ -65,10 +65,12 @@ integer :: n
 integer :: xlen
 integer :: ylen
 integer :: l
+integer :: counting = 0
 
 real(sp), dimension(8) :: dz
 
 real(sp), dimension(2) :: range_elv
+real(sp), dimension(2) :: range_flowacc
 
 real(sp) :: missing
 
@@ -276,6 +278,11 @@ write(0,*)'range elv: ',range_elv
 
 ncstat = nf90_inq_varid(ifid,'flowacc',favarid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_get_att(ifid,favarid,'valid_range',range_flowacc)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+write(0,*)'range flowacc: ',range_flowacc
 
 !---
 
@@ -522,6 +529,12 @@ do j = 1,nblky
 
               nbr(n) = .false.
 
+              llnbr(n,:) = [lon(x),lat(y)]
+
+              !calculate distance to neighbors
+
+              dist(n) = sphdist(ll0,llnbr(n,:)) ! still need to assign dist(n) to avoid pixlen == 0. in CTI calculation
+
             else
 
               elev(n) = dem(x,y)
@@ -541,6 +554,16 @@ do j = 1,nblky
             end if
 
           end do
+
+          if (dist(2) == 0.) then
+            print *, 'x0,y0: ', x0, y0
+            print *, 'lon0, lat0: ', lon(x0), lat(y0)
+            print *, 'x, y : ', x0 + idx(2,1), y0 + idx(2,2)
+            print *, 'lon1, lat1: ', lon(x0 + idx(2,1)), lat(y0 + idx(2,2))
+            print *, 'dist: ', dist
+            !stop "dist is 0"
+          end if
+
 !         end if
 
         ! D8 slope calculation
@@ -596,10 +619,7 @@ do j = 1,nblky
 
             if (slope(x0,y0) > minslope) then
 
-              aspect(x0,y0) = Ad8
-
-              ! Aspect will be "missing" if slope(x0,y0) < minslope,
-              ! which occur on inland waterbodies as slope = 0 and there is no operation below to replace "missing" value
+              aspect(x0,y0) = Ad8  ! Aspect will remain "missing" if slope(x0,y0) < minslope,
 
             end if
 
@@ -659,6 +679,13 @@ do j = 1,nblky
 
         pixlen = 0.5 * (cellsize_ew + cellsize_ns)  ! mean pixel side length
 
+                  if (pixlen == 0.) then
+                    print *, x0, y0
+                    print *, 'dist:', dist
+                    print *, "infinity"
+                    !stop
+                  end if
+
         lnpixlen = log(pixlen)
 
         cdiag = 0.354 * pixlen  ! this is an estimate, would not work for very large pixels (several degrees)
@@ -671,17 +698,21 @@ do j = 1,nblky
 
           msu = max(sum(abs(snbr)) / 8.,minslope) ! mean slope across the non-outflow contour
 
-          if (msu > 0.) then
+          if (msu > 0. .and. flowacc(x0,y0) > 0.) then
 
             dfltsink = log(flowacc(x0,y0) * 1.e6 / (2. * pixlen * msu))
 
             cti(x0,y0) = max(dfltsink - lnpixlen,0.)
 
+            !cti(x0,y0) = min(cti(x0,y0), 25.004) !this is working...quick fix but need to check pixlen (Infinity = -log 0)
+
           else
 
-           cti(x0,y0) = missing ! Will never be activated because minslope = 0.001?
+           cti(x0,y0) = missing
 
           end if
+
+          !print*, 'cti:',cti(x0,y0)
 
         else  ! normal case
 
@@ -698,23 +729,36 @@ do j = 1,nblky
 
           c_in = c_all - cout
 
-          ! part 2, specific catchment area
 
-          aspec = flowacc(x0,y0) * 1.e6 / cout
+          if (flowacc(x0,y0) > 0.) then
 
-          ! part 3, slopes
+            ! part 2, specific catchment area
 
-          ucell = .false.
+            aspec = flowacc(x0,y0) * 1.e6 / cout
 
-          where (nbr) ucell = .true.
+            ! part 3, slopes
 
-          ucell(flowdir) = .false.
+            ucell = .false.
 
-          msu = sum(abs(snbr),mask=ucell) / count(ucell)  ! mean slope across the non-outflow contour
+            where (nbr) ucell = .true.
 
-          ! part 4, topographic index
+            ucell(flowdir) = .false.
 
-          cti(x0,y0) = max(log(aspec / Sd8) - lnpixlen,0.)
+            msu = max(sum(abs(snbr),mask=ucell), minslope) / count(ucell)  ! mean slope across the non-outflow contour
+
+            ! part 4, topographic index
+
+            cti(x0,y0) = max(log(aspec / Sd8) - lnpixlen,0.) ! max(Sd8, minslope) needs checking, in case Sd8 == 0  but its NOT a dfltsink???
+
+            !cti(x0,y0) = min(cti(x0,y0), 25.)
+
+          else
+
+            cti(x0,y0) = missing
+
+          end if
+
+          !print *, cti(x0,y0)
 
         end if
 
@@ -778,5 +822,9 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_close(ofid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+write(0,*) ' '
+write(0,*) '   Done!   '
+write(0,*) ' '
 
 end program calcslope
