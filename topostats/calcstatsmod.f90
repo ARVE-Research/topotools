@@ -23,6 +23,7 @@ type statvals
   real(sp) :: aspect_std
   real(sp) :: cti_med
   real(sp) :: cti_std
+  real(sp) :: areafrac
   real(sp), dimension(nclasses_slope)  :: classfrac_slope
   real(sp), dimension(nclasses_aspect) :: classfrac_aspect
   real(sp), dimension(nclasses_cti)    :: classfrac_cti
@@ -79,6 +80,17 @@ elsewhere
 end where
 
 
+areavect = pack(area,mask=valid)
+
+validarea = sum(areavect)
+
+!areafrac-----------
+
+stats%areafrac = validarea / sum(area)
+
+if (all(valid)) stats%areafrac = 1. !Adjust for rounding error
+
+
 !elevation-----------
 
 blockvect = pack(elev,mask=valid)
@@ -94,10 +106,6 @@ blockvect = pack(slope,mask=valid)
 stats%slope_med = median(blockvect)
 
 stats%slope_std = stdev(blockvect)
-
-areavect = pack(area,mask=valid)
-
-validarea = sum(areavect)
 
   !calculate slope classes
 
@@ -205,6 +213,15 @@ elsewhere
   valid = .false.
 end where
 
+areavect = pack(area,mask=valid)
+
+validarea = sum(areavect)
+
+!areafrac-----------
+
+stats%areafrac = validarea / sum(area)
+
+if (all(valid)) stats%areafrac = 1.
 
 
 !elevation-----------
@@ -222,10 +239,6 @@ blockvect = pack(slope,mask=valid)
 stats%slope_med = median(blockvect)
 
 stats%slope_std = stdev(blockvect)
-
-areavect = pack(area,mask=valid)
-
-validarea = sum(areavect)
 
   !calculate slope classes
 

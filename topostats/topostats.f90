@@ -35,6 +35,7 @@ integer(i4) :: id_aspect_out
 integer(i4) :: id_aspect_std
 integer(i4) :: id_cti_out
 integer(i4) :: id_cti_std
+integer(i4) :: id_areafrac
 integer(i4) :: id_classfrac_slope
 integer(i4) :: id_classfrac_aspect
 integer(i4) :: id_classfrac_cti
@@ -344,6 +345,9 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_inq_varid(ofid,'cti_stdev',id_cti_std)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+ncstat = nf90_inq_varid(ofid,'areafrac',id_areafrac)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
 ncstat = nf90_inq_varid(ofid,'slope_classfrac',id_classfrac_slope)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -362,6 +366,7 @@ allocate(elev_in(sblock_in(1),sblock_in(2)))
 allocate(slope_in(sblock_in(1),sblock_in(2)))
 allocate(aspect_in(sblock_in(1),sblock_in(2)))
 allocate(cti_in(sblock_in(1),sblock_in(2)))
+!allocate(areafrac_in(sblock_in(1),sblock_in(2)))
 
 allocate(stats(sblock_out(1),sblock_out(2)))
 allocate(classfrac_slope(sblock_out(1),sblock_out(2),nclasses_slope))
@@ -394,6 +399,7 @@ do y = 1,nblock_out(2)
     stats%aspect_std = missing_sp
     stats%cti_med    = missing_sp
     stats%cti_std    = missing_sp
+    stats%areafrac   = missing_sp
 
     do k = 1,nclasses_slope
       stats%classfrac_slope(k) = missing_sp
@@ -508,6 +514,9 @@ do y = 1,nblock_out(2)
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     ncstat = nf90_put_var(ofid,id_cti_std,stats%cti_std,start=[a,b])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_areafrac,stats%areafrac,start=[a,b])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     do k = 1,nclasses_slope

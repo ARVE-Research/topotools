@@ -334,6 +334,24 @@ ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
+!area fraction (lon,lat)
+
+ncstat = nf90_def_var(ofid,'areafrac',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','fraction of land area')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','fraction')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
 !slope class fraction (lon,lat,slopeclass)
 
 ncstat = nf90_def_var(ofid,'slope_classfrac',nf90_float,dimids(1:3),varid,chunksizes=chunks,deflate_level=1,shuffle=.true.)
