@@ -208,7 +208,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_put_att(ofid,varid,'long_name','curvature_profile')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'units','radians_per_m')
+ncstat = nf90_put_att(ofid,varid,'units','radians_per_100m')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
@@ -226,7 +226,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_put_att(ofid,varid,'long_name','curvature_plan')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'units','radians_per_m')
+ncstat = nf90_put_att(ofid,varid,'units','radians_per_100m')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
@@ -236,15 +236,15 @@ ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
-! curvature_total (lon,lat)
+! curvature_tangent (lon,lat)
 
-ncstat = nf90_def_var(ofid,'curvature_total',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+ncstat = nf90_def_var(ofid,'curvature_tangent',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'long_name','curvature_total')
+ncstat = nf90_put_att(ofid,varid,'long_name','curvature_tangent')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'units','radians_per_m')
+ncstat = nf90_put_att(ofid,varid,'units','radians_per_100m')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing)
@@ -252,6 +252,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'_FillValue',missing)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
 
 !----
 

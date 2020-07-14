@@ -34,7 +34,7 @@ integer :: id_aspect
 integer :: id_cti
 integer :: id_curvature_profile
 integer :: id_curvature_plan
-integer :: id_curvature_total
+integer :: id_curvature_tangent
 
 real(dp), allocatable, dimension(:)   :: all_lon
 real(dp), allocatable, dimension(:)   :: lon
@@ -46,7 +46,7 @@ real(sp), allocatable, dimension(:,:) :: aspect
 real(sp), allocatable, dimension(:,:) :: cti
 real(sp), allocatable, dimension(:,:) :: curvature_profile
 real(sp), allocatable, dimension(:,:) :: curvature_plan
-real(sp), allocatable, dimension(:,:) :: curvature_total
+real(sp), allocatable, dimension(:,:) :: curvature_tangent
 
 real(dp), dimension(8) :: snbr
 real(sp), dimension(8) :: dist
@@ -86,6 +86,8 @@ real(dp) :: d2zdy2
 real(dp) :: d2zdxdy
 real(dp) :: p
 real(dp) :: q
+
+real(dp) :: rc, qc, pc, tc, sc, w_dis ! Curvature calculation parameters
 
 real(dp) :: Sd8
 real(dp) :: Sfd
@@ -320,7 +322,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_inq_varid(ofid,'curvature_plan',id_curvature_plan)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_inq_varid(ofid,'curvature_total',id_curvature_total)
+ncstat = nf90_inq_varid(ofid,'curvature_tangent',id_curvature_tangent)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 
@@ -361,7 +363,7 @@ allocate(aspect(blklenx,blkleny))
 allocate(cti(blklenx,blkleny))
 allocate(curvature_profile(blklenx, blkleny))
 allocate(curvature_plan(blklenx, blkleny))
-allocate(curvature_total(blklenx, blkleny))
+allocate(curvature_tangent(blklenx, blkleny))
 
 !l = 0
 
@@ -484,11 +486,11 @@ do j = 1,nblky
     cti = missing
     curvature_profile = missing
     curvature_plan = missing
-    curvature_total = missing
+    curvature_tangent = missing
 
     !calculate slopes in the block that is in the center of the superblock
 
-    !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(blklenx,blkleny,missing,dem,idx,slope,aspect,flowacc,cti,curvature_profile,curvature_plan,curvature_total,lon,lat,chunk)
+    !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(blklenx,blkleny,missing,dem,idx,slope,aspect,flowacc,cti,curvature_profile,curvature_plan,curvature_tangent,lon,lat,chunk)
     !$OMP DO SCHEDULE(DYNAMIC,chunk)
 
     do y0 = 1,blkleny
@@ -587,21 +589,49 @@ do j = 1,nblky
 
           ddz = [dzdxc,dzdyc,dzdxd,dzdyd]
 
+          ! 1st method: Curvature parameters from Evan's method (Florinsky, 1988) http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.86.9066&rep=rep1&type=pdf
+
+          w_dis = sum(dist) / 8. ! Average cell length to calculate parameters: rc, tc, sc, pc, qc
+
+          rc = (elev(7) + elev(1) + elev(6) + elev(2) + elev(5) + elev(3) - 2. * (elev(7) + elev(7) + dem(x0,y0))) / (3. * (w_dis ** 2))
+          tc = (elev(7) + elev(8) + elev(1) + elev(5) + elev(4) + elev(3) - 2. * (elev(6) + elev(2) + dem(x0,y0))) / (3. * (w_dis ** 2))
+          sc = (elev(1) + elev(5) - elev(7) - elev(3)) / (4. * (w_dis ** 2))
+          pc = (elev(1) + elev(2) + elev(3) - elev(7) - elev(6) - elev(5)) / (6. * w_dis)
+          qc = (elev(7) + elev(8) + elev(1) - elev(5) - elev(4) - elev(3)) / (6. * w_dis)
+
+          ! Formulea for for profile and plan of curvature
+          ! Hengi & Reuter (2009) Geomorphmetry: Concepts, Software and Applications (P.151)
+
+          curvature_profile(x0,y0) = -((pc ** 2) * rc + 2 * pc * qc * rc * sc + (qc ** 2) * tc) / (((pc ** 2) + (qc ** 2)) * ((1 + (pc ** 2) + (qc ** 2)) ** 1.5))
+          curvature_plan(x0,y0) = -((qc ** 2) * rc - 2 * pc * qc * sc + (pc ** 2) * tc) / (((1 + (pc ** 2) + (qc ** 2)) ** 1.5))
+          curvature_tangent(x0,y0) = -((qc ** 2) * rc - 2 * pc * qc * sc + (pc ** 2) * tc) / (((pc ** 2) + (qc ** 2)) * ((1 + (pc ** 2) + (qc ** 2)) ** 0.5))
+
+          ! Convert to radian per 100m
+          curvature_profile(x0,y0) = curvature_profile(x0,y0) * 100.
+          curvature_plan(x0,y0) = curvature_plan(x0,y0) * 100.
+          curvature_tangent(x0,y0) = curvature_tangent(x0,y0) * 100.
+
+          ! ---
+
+          ! 2nd method: curvature from second derivative calculations from Wilson & Gallant (not working)
+
           ! second derivatives for curvature calculations
+          !d2zdx2 = real((elev(2) - 2. * elev(9) + elev(6)) / (((dist(2) + dist(6)) / 2.) ** 2))
+          !d2zdy2 = real((elev(8) - 2. * elev(9) + elev(4)) / (((dist(8) + dist(4)) / 2.) ** 2))
+          !d2zdxdy = real((elev(1) + elev(5) - elev(7) - elev(3)) / ((((dist(2) + dist(4) + dist(6) + dist(8)) / 4.) ** 2) * 4.))
 
-          d2zdx2 = real((elev(2) - 2 * elev(9) + elev(6)) / (((dist(2) + dist(6)) / 2) ** 2))
-          d2zdy2 = real((elev(8) - 2 * elev(9) + elev(4)) / (((dist(8) + dist(4)) / 2) ** 2))
-          d2zdxdy = real((elev(1) + elev(5) - elev(7) - elev(3)) / (((dist(1) + dist(5) + dist(7) + dist(3)) / 4) ** 2) / 4)
+          !p = (dzdxc ** 2) + (dzdyc ** 2)       !TAPES-G formulea from Wilson & Gallant p.57
+          !q = p + 1._dp
 
-          p = (dzdxc ** 2) + (dzdyc ** 2)       !TAPES-G formulea from Wilson & Gallant p.57
-          q = p + 1._dp
+          ! Convert to radian per 100m
+          !curvature_profile(x0,y0) = curvature_profile(x0,y0) * 100.
+          !curvature_plan(x0,y0) = curvature_tangent(x0,y0) * 100.
 
-          curvature_profile(x0,y0) = ((d2zdx2 * (dzdxc ** 2)) + (2 * d2zdxdy * dzdxc * dzdyc) + (d2zdy2 * (dzdyc ** 2))) / (p * (q ** 1.5)) !Profile curvature
-          curvature_plan(x0,y0) = ((d2zdx2 * dzdyc ** 2) - (2 * d2zdxdy * dzdxc * dzdyc) + (d2zdy2 * dzdxc ** 2)) / (p ** 1.5) !Plan curvature
-          curvature_total(x0,y0) = ((d2zdx2 ** 2) + (2 * d2zdxdy ** 2) + (d2zdy2 ** 2)) ! Formula for total curvature Wilson & Gallant p.57
-          !Kt = ((d2zdx2 * dzdyc ** 2) - (2 * d2zdxdy * dzdxc * dzdyc) + (d2zdy2 * dzdxc ** 2)) / (p * q ** 0.5) !Tangent curvature
 
-          !curvature(x0,y0) = curvature(x0,y0) * 100 !Adjust to randians per 100m
+          !curvature_profile(x0,y0) = ((d2zdx2 * (dzdxc ** 2)) + (2. * d2zdxdy * dzdxc * dzdyc) + (d2zdy2 * (dzdyc ** 2))) / (p * (q ** 1.5)) !Profile curvature
+          !curvature_plan(x0,y0) = ((d2zdx2 * (dzdyc ** 2)) - (2. * d2zdxdy * dzdxc * dzdyc) + (d2zdy2 * (dzdxc ** 2))) / (p ** 1.5) !Plan curvature
+          !curvature_tangent(x0,y0) = ((d2zdx2 * (dzdyc ** 2)) - (2. * d2zdxdy * dzdxc * dzdyc) + (d2zdy2 * (dzdxc ** 2))) / (p * (q ** 0.5)) !Tangent curvature
+          !curvature_total(x0,y0) = ((d2zdx2 ** 2) + (2. * (d2zdxdy ** 2)) + (d2zdy2 ** 2)) ! Formula for total curvature Wilson & Gallant p.57
 
           ! --
 
@@ -609,11 +639,11 @@ do j = 1,nblky
 
             slope(x0,y0) = Sd8 ! Sd8 = 0 if land is flat, which is the case for inland waterbodies
 
-            if(slope(x0,y0) == 0) then
+            if(slope(x0,y0) == 0.) then
 
               curvature_profile(x0,y0) = missing
               curvature_plan(x0,y0) = missing
-              curvature_total(x0,y0) = missing
+              curvature_tangent(x0,y0) = missing
 
             end if
 
@@ -666,7 +696,16 @@ do j = 1,nblky
 
           curvature_profile(x0,y0) = missing
           curvature_plan(x0,y0) = missing
-          curvature_total(x0,y0) = missing
+          curvature_tangent(x0,y0) = missing
+
+        end if
+
+        ! Avoid unphysically large values for curvature when slope is extremely small
+        if (slope(x0,y0) < minslope) then
+
+          curvature_profile(x0,y0) = missing
+          curvature_plan(x0,y0) = missing
+          curvature_tangent(x0,y0) = missing
 
         end if
 
@@ -805,7 +844,7 @@ do j = 1,nblky
     ncstat = nf90_put_var(ofid,id_curvature_plan,curvature_plan,start=[srtx_o,srty_o],count=[blklenx,blkleny])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-    ncstat = nf90_put_var(ofid,id_curvature_total,curvature_total,start=[srtx_o,srty_o],count=[blklenx,blkleny])
+    ncstat = nf90_put_var(ofid,id_curvature_tangent,curvature_tangent,start=[srtx_o,srty_o],count=[blklenx,blkleny])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     !write(0,*)'done'
