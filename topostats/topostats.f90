@@ -1,6 +1,6 @@
 program topostats
 
-use parametersmod, only : i1,i2,i4,sp,dp,missing_i2,missing_sp
+use parametersmod, only : i1,i2,i4,sp,dp,missing_sp
 use netcdfmod,     only : ncstat,handle_err
 use netcdf
 use typesizes
@@ -8,33 +8,37 @@ use coordsmod,     only : index,parsecoords
 use statsmod,      only : median,stdev
 use utilitiesmod,  only : iminloc,cellarea
 use outputmod,     only : genoutfile
-use calcstatsmod,  only : nclasses,llim,statvals,calcstats
+use calcstatsmod,  only : nclasses_slope,nclasses_aspect,nclasses_cti,classbin,statvals,calcstats,calcstats_aspect
+use calcfracmod,   only : calcfrac
 
 implicit none
 
-character(100) :: topofile
-character(100) :: landmaskfile
-character(100) :: joboptions
+character(100) :: infile
 character(100) :: outfile
 
-namelist / infiles / topofile, landmaskfile
-
 integer(i4) :: ifid
-integer(i4) :: lfid
 integer(i4) :: ofid
 
 integer(i4) :: dimid
 integer(i4) :: xvarid
 integer(i4) :: yvarid
 
-integer(i4) :: id_landmask
 integer(i4) :: id_elev_in
 integer(i4) :: id_slope_in
+integer(i4) :: id_aspect_in
+integer(i4) :: id_cti_in
 integer(i4) :: id_elev_out
 integer(i4) :: id_elev_std
 integer(i4) :: id_slope_out
 integer(i4) :: id_slope_std
-integer(i4) :: id_classfrac
+integer(i4) :: id_aspect_out
+integer(i4) :: id_aspect_std
+integer(i4) :: id_cti_out
+integer(i4) :: id_cti_std
+integer(i4) :: id_areafrac
+integer(i4) :: id_classfrac_slope
+integer(i4) :: id_classfrac_aspect
+integer(i4) :: id_classfrac_cti
 
 integer(i4) :: xpos_out
 integer(i4) :: ypos_out
@@ -54,11 +58,14 @@ real(dp),    allocatable, dimension(:)   :: lat_out
 
 real(sp),    allocatable, dimension(:,:) :: area
 
-integer(i1), allocatable, dimension(:,:) :: landmask
-integer(i2), allocatable, dimension(:,:) :: elev_in
+real(sp),    allocatable, dimension(:,:) :: elev_in
 real(sp),    allocatable, dimension(:,:) :: slope_in
+real(sp),    allocatable, dimension(:,:) :: aspect_in
+real(sp),    allocatable, dimension(:,:) :: cti_in
 
-real(sp),    allocatable, dimension(:,:,:) :: classfrac
+real(sp),    allocatable, dimension(:,:,:) :: classfrac_slope
+real(sp),    allocatable, dimension(:,:,:) :: classfrac_aspect
+real(sp),    allocatable, dimension(:,:,:) :: classfrac_cti
 
 real(dp), dimension(2) :: hpx
 
@@ -80,6 +87,7 @@ integer(i4) :: k
 
 integer(i4) :: varid
 
+type(classbin) :: llim
 type(statvals), allocatable, dimension(:,:) :: stats
 
 integer, dimension(2) :: sblock_in
@@ -119,13 +127,9 @@ character(10) :: outres
 integer(i4), dimension(2) :: nblkchk
 
 !-------------------------------------------------------------------------------------
-!set up the bounds for the slope classes
+!set up the bounds for the variable bin classes
 
-llim(1:2) = 0.
-
-do i = 3,nclasses
-  llim(i) = 10.**(0.2 * real(i-1) - 2.4)
-end do
+call calcfrac(llim)
 
 !--------
 
@@ -141,31 +145,22 @@ yres_out = xres_out
 
 !---
 
-call getarg(3,joboptions)
+call getarg(3,infile)
 
-open(10,file=joboptions,status='old')
-
-read(10,nml=infiles)
-
-close(10)
-
-ncstat = nf90_open(topofile,nf90_nowrite,ifid)
-if (ncstat/=nf90_noerr) call handle_err(ncstat)
-
-ncstat = nf90_open(landmaskfile,nf90_nowrite,lfid)
+ncstat = nf90_open(infile,nf90_nowrite,ifid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !---
 
 ncstat = nf90_inq_dimid(ifid,'lon',dimid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
-  
+
 ncstat = nf90_inquire_dimension(ifid,dimid,len=xlen)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_dimid(ifid,'lat',dimid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
-  
+
 ncstat = nf90_inquire_dimension(ifid,dimid,len=ylen)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -173,7 +168,7 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_varid(ifid,'lon',xvarid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
-  
+
 ncstat = nf90_get_att(ifid,xvarid,'actual_range',lonrange)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -220,19 +215,28 @@ deallocate(lat)
 
 !---
 
-ncstat = nf90_inq_varid(lfid,'land',id_landmask)
-if (ncstat/=nf90_noerr) call handle_err(ncstat)
-
 ncstat = nf90_inq_varid(ifid,'elev',id_elev_in)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_varid(ifid,'slope',id_slope_in)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_get_att(ifid,id_elev_in,'missing_value',missing_i2)
+ncstat = nf90_inq_varid(ifid,'aspect',id_aspect_in)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ifid,'cti',id_cti_in)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_get_att(ifid,id_elev_in,'missing_value',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_get_att(ifid,id_slope_in,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_get_att(ifid,id_aspect_in,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_get_att(ifid,id_cti_in,'missing_value',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inquire_variable(ifid,id_elev_in,chunksizes=sblock_in)
@@ -271,7 +275,7 @@ nblock_out(2) = out%county / sblock_out(2)
 
 !---
 
-! write(0,*)missing_i2,missing_sp
+! write(0,*)missing_sp,missing_sp
 write(0,*)'total input pixels:     ',in%countx,in%county
 write(0,*)'total output pixels:    ',out%countx,out%county
 write(0,*)'input read block size:  ',sblock_in
@@ -296,7 +300,7 @@ schunk_out(3) = 1
 
 nchunk_out(1) = out%countx / schunk_out(1)
 nchunk_out(2) = out%county / schunk_out(2)
-nchunk_out(3) = nclasses
+nchunk_out(3) = nclasses_slope
 
 write(0,*)'output chunk size:      ',schunk_out
 write(0,*)'num output chunks:      ',nchunk_out
@@ -307,8 +311,8 @@ nblkchk = schunk_out(1:2) / sblock_out
 
 write(0,*)'num outblocks per chunk:',nblkchk
 
-write(0,*)'press return to continue'
-read(*,*)
+!write(0,*)'press return to continue'
+!read(*,*)
 
 !---
 !generate output file
@@ -323,62 +327,100 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_inq_varid(ofid,'slope',id_slope_out)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+ncstat = nf90_inq_varid(ofid,'aspect',id_aspect_out)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'cti',id_cti_out)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
 ncstat = nf90_inq_varid(ofid,'elev_stdev',id_elev_std)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_varid(ofid,'slope_stdev',id_slope_std)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_inq_varid(ofid,'classfrac',id_classfrac)
+ncstat = nf90_inq_varid(ofid,'aspect_stdev',id_aspect_std)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'cti_stdev',id_cti_std)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'areafrac',id_areafrac)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'slope_classfrac',id_classfrac_slope)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'aspect_classfrac',id_classfrac_aspect)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'cti_classfrac',id_classfrac_cti)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !---
-!calculate median elevation and slope and standard deviations
+!nclasses_slopeulate median elevation and slope and standard deviations
 
 allocate(lat(sblock_in(2)))
 allocate(area(sblock_in(1),sblock_in(2)))
 allocate(elev_in(sblock_in(1),sblock_in(2)))
 allocate(slope_in(sblock_in(1),sblock_in(2)))
-allocate(landmask(sblock_in(1),sblock_in(2)))
+allocate(aspect_in(sblock_in(1),sblock_in(2)))
+allocate(cti_in(sblock_in(1),sblock_in(2)))
+!allocate(areafrac_in(sblock_in(1),sblock_in(2)))
 
 allocate(stats(sblock_out(1),sblock_out(2)))
-allocate(classfrac(sblock_out(1),sblock_out(2),nclasses))
+allocate(classfrac_slope(sblock_out(1),sblock_out(2),nclasses_slope))
+allocate(classfrac_aspect(sblock_out(1),sblock_out(2),nclasses_aspect))
+allocate(classfrac_cti(sblock_out(1),sblock_out(2),nclasses_cti))
 
 do y = 1,nblock_out(2)
-  
+
   yoffset = (y-1) * sblock_out(2) * pixpix(2)
-  
+
   do x = 1,nblock_out(1)
 
     write(status_line,'(a,i5,a,i5)')' working on row: ',y,' col: ',x
     call overprint(trim(status_line))
-    
+
     xoffset = (x-1) * sblock_out(1) * pixpix(1)
-    
+
     !output grid offset
-    
+
     b = 1 + (y-1) * sblock_out(2)
     a = 1 + (x-1) * sblock_out(1)
-    
-    !set output structure to default values
-    
-    stats%elev_med  = missing_i2
-    stats%elev_std  = missing_i2
-    stats%slope_med = missing_sp
-    stats%slope_std = missing_sp
 
-    do k = 1,nclasses
-      stats%classfrac(k) = missing_sp
+    !set output structure to default values
+
+    stats%elev_med   = missing_sp
+    stats%elev_std   = missing_sp
+    stats%slope_med  = missing_sp
+    stats%slope_std  = missing_sp
+    stats%aspect_med = missing_sp
+    stats%aspect_std = missing_sp
+    stats%cti_med    = missing_sp
+    stats%cti_std    = missing_sp
+    stats%areafrac   = missing_sp
+
+    do k = 1,nclasses_slope
+      stats%classfrac_slope(k) = missing_sp
     end do
-    
+
+    do k = 1,nclasses_aspect
+      stats%classfrac_aspect(k) = missing_sp
+    end do
+
+    do k = 1,nclasses_cti
+      stats%classfrac_cti(k) = missing_sp
+    end do
+
     !---
-    
+
     startx = in%startx + xoffset
     starty = in%starty + yoffset
-    
+
     !---
     !read block of input data
-    
+
 !     write(0,*)'read'
 
     ncstat = nf90_get_var(ifid,yvarid,lat,start=[starty])
@@ -390,58 +432,58 @@ do y = 1,nblock_out(2)
     ncstat = nf90_get_var(ifid,id_slope_in,slope_in,start=[startx,starty])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-    ncstat = nf90_get_var(lfid,id_landmask,landmask,start=[startx,starty])
+    ncstat = nf90_get_var(ifid,id_aspect_in,aspect_in,start=[startx,starty])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
-      
+
+    ncstat = nf90_get_var(ifid,id_cti_in,cti_in,start=[startx,starty])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
     !---
 
-!     write(0,*)'calc',size(slope_in),size(landmask)
-    
-    do j = 1,sblock_in(1)
-      do i = 1,sblock_in(2)
-        if (landmask(i,j) /= 1) then  !slope_in(i,j) == 0. .and. 
+!     write(0,*)'nclasses_slope',size(slope_in)
 
-          elev_in(i,j)  = missing_i2
-          slope_in(i,j) = missing_sp
+    if (all(elev_in == missing_sp)) cycle
 
-	end if
-      end do
-    end do
-
-    if (all(elev_in == missing_i2)) cycle
-
-    !calculate input cell area
+    !nclasses_slopeulate input cell area
 
     do k = 1,sblock_in(2)
       area(:,k) = cellarea(lat(k),[xres_in,yres_in])
     end do
-    
+
     !---
-    !calculate stats for each output pixel in this input block
-    
+    !nclasses_slopeulate stats for each output pixel in this input block
+
     ompchunk = min(8,sblock_out(2))
 
     !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(m,n,p,q,r,s,xpos_out,ypos_out)
     !$OMP DO SCHEDULE(DYNAMIC,ompchunk)
-    
+
     do n = 1,sblock_out(2)
       do m = 1,sblock_out(1)
-        
+
         p = 1 + pixpix(1) * (m-1)
         q = p + pixpix(1) - 1
         r = 1 + pixpix(2) * (n-1)
         s = r + pixpix(2) - 1
-        
-        if (all(elev_in(p:q,r:s) == missing_i2)) cycle
 
-        call calcstats(area(p:q,r:s),elev_in(p:q,r:s),slope_in(p:q,r:s),stats(m,n))
-        
+        if (all(elev_in(p:q,r:s) == missing_sp)) cycle
+
+          if(all(aspect_in(p:q,r:s) == missing_sp)) then
+
+            call calcstats(area(p:q,r:s),elev_in(p:q,r:s),slope_in(p:q,r:s),cti_in(p:q,r:s),stats(m,n),llim) !Avoid floating invalid in std_dev calculation
+            !Aspect remain as "missing" in this subroutine
+          else
+
+            call calcstats_aspect(area(p:q,r:s),elev_in(p:q,r:s),slope_in(p:q,r:s),aspect_in(p:q,r:s),cti_in(p:q,r:s),stats(m,n),llim)
+
+          end if
+
       end do
     end do
 
     !$OMP END DO NOWAIT
     !$OMP END PARALLEL
-  
+
     !---
     !write data if output buffer is full
 
@@ -461,12 +503,41 @@ do y = 1,nblock_out(2)
 
     ncstat = nf90_put_var(ofid,id_slope_std,stats%slope_std,start=[a,b])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
-      
-    do k = 1,nclasses
-      classfrac(:,:,k) = stats%classfrac(k)
+
+    ncstat = nf90_put_var(ofid,id_aspect_out,stats%aspect_med,start=[a,b])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_aspect_std,stats%aspect_std,start=[a,b])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_cti_out,stats%cti_med,start=[a,b])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_cti_std,stats%cti_std,start=[a,b])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_areafrac,stats%areafrac,start=[a,b])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    do k = 1,nclasses_slope
+      classfrac_slope(:,:,k) = stats%classfrac_slope(k)
     end do
 
-    ncstat = nf90_put_var(ofid,id_classfrac,classfrac,start=[a,b,1])
+    do k = 1,nclasses_aspect
+      classfrac_aspect(:,:,k) = stats%classfrac_aspect(k)
+    end do
+
+    do k = 1,nclasses_cti
+      classfrac_cti(:,:,k) = stats%classfrac_cti(k)
+    end do
+
+    ncstat = nf90_put_var(ofid,id_classfrac_slope,classfrac_slope,start=[a,b,1])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_classfrac_aspect,classfrac_aspect,start=[a,b,1])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_classfrac_cti,classfrac_cti,start=[a,b,1])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
   end do    !output chunks
@@ -506,7 +577,19 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_inq_varid(ofid,'slopeclass',varid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_put_var(ofid,varid,llim)
+ncstat = nf90_put_var(ofid,varid,llim%slope_bin)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'aspectclass',varid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_var(ofid,varid,llim%aspect_bin)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'cticlass',varid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_var(ofid,varid,llim%cti_bin)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !---
@@ -515,10 +598,9 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_close(ifid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-ncstat = nf90_close(lfid)
-if (ncstat/=nf90_noerr) call handle_err(ncstat)
-
 ncstat = nf90_close(ofid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+print *, llim
 
 end program topostats
