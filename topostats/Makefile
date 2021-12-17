@@ -1,17 +1,18 @@
-#makefile
+# makefile
 
-NC_LIB=/share1/netcdf/4.7.1-impi/lib
-NC_INC=/share1/netcdf/4.7.1-impi/include
+NC_LIB=/home/public/easybuild/software/netCDF-Fortran/4.5.3-gompi-2020a/lib
+NC_INC=/home/public/easybuild/software/netCDF-Fortran/4.5.3-gompi-2020a/include
 
-CC = icc
-FC = ifort
-LDFLAGS  = -L$(NC_LIB) -qopenmp
-CPPFLAGS = -I$(NC_INC) -Difort
+CC = gcc
+FC = gfortran
+LDFLAGS  = -fopenmp
+# CPPFLAGS = -Difort
 
-#FCFLAGS = -debug -fpe0 -traceback -g -check -check noarg_temp_created -warn all #-qopenmp
-FCFLAGS  = -xHost -qopenmp #-xHost -vec-report -openmp  -openmp-report -warn all
-LIBS     = -lnetcdff -lnetcdf #-lmkl_intel_lp64 -lmkl_sequential -lmkl_core -loverprint
+LIBS     = -lnetcdff -lnetcdf #-loverprint #-lmkl_intel_lp64 -lmkl_sequential -lmkl_core
+FCFLAGS  = -O3 -fopenmp -lnetcdff -lnetcdf -L$(NC_LIB) -I$(NC_INC) -pg #-xHost -vec-report -openmp  -openmp-report -warn all
 
+# FCFLAGS = -debug -fpe0 -traceback -g -check -check noarg_temp_created -warn all #-qopenmp
+# FCFLAGS = -ftree-vectorize -msse2 -ftree-vectorizer-verbose=2 #-fbacktrace -ggdb -g -fcheck=all -ffpe-trap=invalid,zero
 
 OBJS = overprint.o			\
 			 parametersmod.o  \
@@ -29,7 +30,7 @@ OBJS = overprint.o			\
 .SUFFIXES: .o .f90 .f .mod
 
 %.o : %.c
-	$(CC) $(CFLAGS) -c -o $(*F).o $(CPPFLAGS) $<
+	$(CC) $(CFLAGS) -c $(*F).c $(CPPFLAGS) $<
 
 %.o : %.f
 	$(FC) $(FCFLAGS) -c -o $(*F).o $(CPPFLAGS) $<
@@ -40,12 +41,7 @@ OBJS = overprint.o			\
 all::	topostats
 
 topostats:  $(OBJS)
-	$(FC) -o topostats $(OBJS) $(LDFLAGS) $(LIBS)
+	$(FC) -lc -o topostats $(OBJS) $(LDFLAGS) $(LIBS)
 
 clean::
 	-rm topostats *.mod *.o
-
-
-
-
-#FCFLAGS = -ftree-vectorize -msse2 -ftree-vectorizer-verbose=2 #-fbacktrace -ggdb -g -fcheck=all -ffpe-trap=invalid,zero

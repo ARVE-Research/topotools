@@ -1,7 +1,7 @@
 module calcfracmod
 
 use parametersmod, only : i2,i4,sp,dp
-use calcstatsmod,  only : classbin,nclasses_slope,nclasses_aspect,nclasses_cti
+use calcstatsmod,  only : classbin,nclasses_slope,nclasses_aspect,nclasses_cti,nclasses_hand
 
 contains
 
@@ -38,6 +38,16 @@ integer :: i
 
   llim%cti_bin(11) = 15.
   llim%cti_bin(12:13) = 20.
+
+  ! HAND bin (using exponential values from exp(-2) to exp(6))
+
+  llim%hand_bin(1) = 0.
+
+  do i = 2, nclasses_hand-1
+    llim%hand_bin(i) = exp(real(i) - 4.)
+  end do
+
+  llim%hand_bin(nclasses_hand) = exp(6.)
 
 end subroutine calcfrac
 

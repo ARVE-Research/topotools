@@ -45,6 +45,7 @@ real(dp), dimension(2) :: yrange
 integer :: nclass_slope
 integer :: nclass_aspect
 integer :: nclass_cti
+integer :: nclass_hand
 
 character(8)  :: today
 character(10) :: now
@@ -52,13 +53,14 @@ character(10) :: now
 integer(i4), allocatable, dimension(:) :: dimids
 integer(i4),              dimension(3) :: dims
 
-integer, parameter :: ndims = 5
+integer, parameter :: ndims = 6
 
 !---
 
 nclass_slope  = size(llim%slope_bin)
 nclass_aspect = size(llim%aspect_bin)
 nclass_cti    = size(llim%cti_bin)
+nclass_hand    = size(llim%hand_bin)
 
 xrange = [id%minlon,id%maxlon]
 yrange = [id%minlat,id%maxlat]
@@ -184,6 +186,23 @@ ncstat = nf90_put_att(ofid,varid,'units','index')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
+!hand classes
+
+ncstat = nf90_def_dim(ofid,'handclass',nclass_hand,dimid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+dimids(6) = dimid
+
+ncstat = nf90_def_var(ofid,'handclass',nf90_float,dimid,varid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','lower limit of hand class threshold')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','m')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
 !elevation (lon,lat)
 
 ncstat = nf90_def_var(ofid,'elev',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
@@ -247,6 +266,24 @@ ncstat = nf90_put_att(ofid,varid,'long_name','median topographic wetness index (
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','index')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+!hand (lon,lat)
+
+ncstat = nf90_def_var(ofid,'hand',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','median height above nearest drainage (HAND)')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','m')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
@@ -334,6 +371,24 @@ ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !----
+!standard deviation of HAND (lon,lat)
+
+ncstat = nf90_def_var(ofid,'hand_stdev',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','standard deviation of height above nearest drainage (HAND)')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','m')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
 !area fraction (lon,lat)
 
 ncstat = nf90_def_var(ofid,'areafrac',nf90_float,dimids(1:2),varid,chunksizes=chunks(1:2),deflate_level=1,shuffle=.true.)
@@ -398,6 +453,26 @@ ncstat = nf90_def_var(ofid,'cti_classfrac',nf90_float,dims,varid,chunksizes=chun
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'long_name','fraction of the gridcell in each topographic wetness index class')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','fraction')
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+!----
+!HAND class fraction (lon,lat,handclass)
+
+dims = [dimids(1), dimids(2), dimids(6)]
+
+ncstat = nf90_def_var(ofid,'hand_classfrac',nf90_float,dims,varid,chunksizes=chunks,deflate_level=1,shuffle=.true.)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','fraction of the gridcell in each height above nearest drainage (HAND) class')
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','fraction')

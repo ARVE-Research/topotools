@@ -1,22 +1,28 @@
 program topostats
 
+! Command line
+! ./topostats 100/120/10/30 60 /home/terraces/datasets/topography/topotools_output/world_slope.nc /home/terraces/datasets/topography/MERIT-Hydro/MERIT-Hydro.nc test.nc
+
 use parametersmod, only : i1,i2,i4,sp,dp,missing_sp
 use netcdfmod,     only : ncstat,handle_err
 use netcdf
+use omp_lib
 use typesizes
 use coordsmod,     only : index,parsecoords
 use statsmod,      only : median,stdev
 use utilitiesmod,  only : iminloc,cellarea
 use outputmod,     only : genoutfile
-use calcstatsmod,  only : nclasses_slope,nclasses_aspect,nclasses_cti,classbin,statvals,calcstats,calcstats_aspect
+use calcstatsmod,  only : nclasses_slope,nclasses_aspect,nclasses_cti,nclasses_hand,classbin,statvals,calcstats,calcstats_aspect
 use calcfracmod,   only : calcfrac
 
 implicit none
 
 character(100) :: infile
+character(100) :: demfile
 character(100) :: outfile
 
 integer(i4) :: ifid
+integer(i4) :: dfid
 integer(i4) :: ofid
 
 integer(i4) :: dimid
@@ -27,6 +33,7 @@ integer(i4) :: id_elev_in
 integer(i4) :: id_slope_in
 integer(i4) :: id_aspect_in
 integer(i4) :: id_cti_in
+integer(i4) :: id_hand_in
 integer(i4) :: id_elev_out
 integer(i4) :: id_elev_std
 integer(i4) :: id_slope_out
@@ -35,10 +42,13 @@ integer(i4) :: id_aspect_out
 integer(i4) :: id_aspect_std
 integer(i4) :: id_cti_out
 integer(i4) :: id_cti_std
+integer(i4) :: id_hand_out
+integer(i4) :: id_hand_std
 integer(i4) :: id_areafrac
 integer(i4) :: id_classfrac_slope
 integer(i4) :: id_classfrac_aspect
 integer(i4) :: id_classfrac_cti
+integer(i4) :: id_classfrac_hand
 
 integer(i4) :: xpos_out
 integer(i4) :: ypos_out
@@ -62,10 +72,12 @@ real(sp),    allocatable, dimension(:,:) :: elev_in
 real(sp),    allocatable, dimension(:,:) :: slope_in
 real(sp),    allocatable, dimension(:,:) :: aspect_in
 real(sp),    allocatable, dimension(:,:) :: cti_in
+real(sp),    allocatable, dimension(:,:) :: hand_in
 
 real(sp),    allocatable, dimension(:,:,:) :: classfrac_slope
 real(sp),    allocatable, dimension(:,:,:) :: classfrac_aspect
 real(sp),    allocatable, dimension(:,:,:) :: classfrac_cti
+real(sp),    allocatable, dimension(:,:,:) :: classfrac_hand
 
 real(dp), dimension(2) :: hpx
 
@@ -147,7 +159,12 @@ yres_out = xres_out
 
 call getarg(3,infile)
 
+call getarg(4,demfile)    ! For the MERIT-Hydro DEM file (Leo Lai, Dec 2021)
+
 ncstat = nf90_open(infile,nf90_nowrite,ifid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_open(demfile,nf90_nowrite,dfid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !---
@@ -227,6 +244,9 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_inq_varid(ifid,'cti',id_cti_in)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+ncstat = nf90_inq_varid(dfid,'hand',id_hand_in)           ! dfid = demfile (seperate from infile which is world_slope.nc) (Leo Lai, Dec 2021)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
 ncstat = nf90_get_att(ifid,id_elev_in,'missing_value',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -237,6 +257,9 @@ ncstat = nf90_get_att(ifid,id_aspect_in,'missing_value',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_get_att(ifid,id_cti_in,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_get_att(dfid,id_hand_in,'missing_value',missing_sp)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inquire_variable(ifid,id_elev_in,chunksizes=sblock_in)
@@ -317,7 +340,7 @@ write(0,*)'num outblocks per chunk:',nblkchk
 !---
 !generate output file
 
-call getarg(4,outfile)
+call getarg(5,outfile)
 
 call genoutfile(outfile,out,llim,schunk_out,ofid)
 
@@ -333,6 +356,9 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_inq_varid(ofid,'cti',id_cti_out)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+ncstat = nf90_inq_varid(ofid,'hand',id_hand_out)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
 ncstat = nf90_inq_varid(ofid,'elev_stdev',id_elev_std)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
@@ -343,6 +369,9 @@ ncstat = nf90_inq_varid(ofid,'aspect_stdev',id_aspect_std)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_varid(ofid,'cti_stdev',id_cti_std)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'hand_stdev',id_hand_std)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_inq_varid(ofid,'areafrac',id_areafrac)
@@ -357,6 +386,11 @@ if (ncstat/=nf90_noerr) call handle_err(ncstat)
 ncstat = nf90_inq_varid(ofid,'cti_classfrac',id_classfrac_cti)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+ncstat = nf90_inq_varid(ofid,'hand_classfrac',id_classfrac_hand)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+
+
 !---
 !nclasses_slopeulate median elevation and slope and standard deviations
 
@@ -366,12 +400,14 @@ allocate(elev_in(sblock_in(1),sblock_in(2)))
 allocate(slope_in(sblock_in(1),sblock_in(2)))
 allocate(aspect_in(sblock_in(1),sblock_in(2)))
 allocate(cti_in(sblock_in(1),sblock_in(2)))
+allocate(hand_in(sblock_in(1),sblock_in(2)))
 !allocate(areafrac_in(sblock_in(1),sblock_in(2)))
 
 allocate(stats(sblock_out(1),sblock_out(2)))
 allocate(classfrac_slope(sblock_out(1),sblock_out(2),nclasses_slope))
 allocate(classfrac_aspect(sblock_out(1),sblock_out(2),nclasses_aspect))
 allocate(classfrac_cti(sblock_out(1),sblock_out(2),nclasses_cti))
+allocate(classfrac_hand(sblock_out(1),sblock_out(2),nclasses_hand))
 
 do y = 1,nblock_out(2)
 
@@ -379,8 +415,10 @@ do y = 1,nblock_out(2)
 
   do x = 1,nblock_out(1)
 
-    write(status_line,'(a,i5,a,i5)')' working on row: ',y,' col: ',x
-    call overprint(trim(status_line))
+    ! write(status_line,'(a,i5,a,i5)')' working on row: ',y,' col: ',x
+    ! call overprint(trim(status_line))
+
+    write(*,'(a,i5,a,i5)')' working on row: ',y,' col: ',x
 
     xoffset = (x-1) * sblock_out(1) * pixpix(1)
 
@@ -399,6 +437,8 @@ do y = 1,nblock_out(2)
     stats%aspect_std = missing_sp
     stats%cti_med    = missing_sp
     stats%cti_std    = missing_sp
+    stats%hand_med    = missing_sp
+    stats%hand_std    = missing_sp
     stats%areafrac   = missing_sp
 
     do k = 1,nclasses_slope
@@ -411,6 +451,10 @@ do y = 1,nblock_out(2)
 
     do k = 1,nclasses_cti
       stats%classfrac_cti(k) = missing_sp
+    end do
+
+    do k = 1,nclasses_hand
+      stats%classfrac_hand(k) = missing_sp
     end do
 
     !---
@@ -438,6 +482,9 @@ do y = 1,nblock_out(2)
     ncstat = nf90_get_var(ifid,id_cti_in,cti_in,start=[startx,starty])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+    ncstat = nf90_get_var(dfid,id_hand_in,hand_in,start=[startx,starty])          ! dfid = demfile MERIT-Hydro
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
     !---
 
 !     write(0,*)'nclasses_slope',size(slope_in)
@@ -453,12 +500,15 @@ do y = 1,nblock_out(2)
     !---
     !nclasses_slopeulate stats for each output pixel in this input block
 
-    ompchunk = min(8,sblock_out(2))
+    ompchunk = min(1,sblock_out(2))
 
     !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(m,n,p,q,r,s,xpos_out,ypos_out)
     !$OMP DO SCHEDULE(DYNAMIC,ompchunk)
 
     do n = 1,sblock_out(2)
+
+      ! print *, omp_get_thread_num(), 'sblock_out:', n, sblock_out, ompchunk
+
       do m = 1,sblock_out(1)
 
         p = 1 + pixpix(1) * (m-1)
@@ -470,11 +520,13 @@ do y = 1,nblock_out(2)
 
           if(all(aspect_in(p:q,r:s) == missing_sp)) then
 
-            call calcstats(area(p:q,r:s),elev_in(p:q,r:s),slope_in(p:q,r:s),cti_in(p:q,r:s),stats(m,n),llim) !Avoid floating invalid in std_dev calculation
+            call calcstats(area(p:q,r:s),elev_in(p:q,r:s),slope_in(p:q,r:s),cti_in(p:q,r:s), &
+                          hand_in(p:q,r:s),stats(m,n),llim) !Avoid floating invalid in std_dev calculation
             !Aspect remain as "missing" in this subroutine
           else
 
-            call calcstats_aspect(area(p:q,r:s),elev_in(p:q,r:s),slope_in(p:q,r:s),aspect_in(p:q,r:s),cti_in(p:q,r:s),stats(m,n),llim)
+            call calcstats_aspect(area(p:q,r:s),elev_in(p:q,r:s),slope_in(p:q,r:s),&
+                                  aspect_in(p:q,r:s),cti_in(p:q,r:s),hand_in(p:q,r:s),stats(m,n),llim)
 
           end if
 
@@ -516,19 +568,29 @@ do y = 1,nblock_out(2)
     ncstat = nf90_put_var(ofid,id_cti_std,stats%cti_std,start=[a,b])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
+    ncstat = nf90_put_var(ofid,id_hand_out,stats%hand_med,start=[a,b])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_hand_std,stats%hand_std,start=[a,b])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
     ncstat = nf90_put_var(ofid,id_areafrac,stats%areafrac,start=[a,b])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
-    do k = 1,nclasses_slope
+    do k = 1, nclasses_slope
       classfrac_slope(:,:,k) = stats%classfrac_slope(k)
     end do
 
-    do k = 1,nclasses_aspect
+    do k = 1, nclasses_aspect
       classfrac_aspect(:,:,k) = stats%classfrac_aspect(k)
     end do
 
-    do k = 1,nclasses_cti
+    do k = 1, nclasses_cti
       classfrac_cti(:,:,k) = stats%classfrac_cti(k)
+    end do
+
+    do k = 1, nclasses_hand
+      classfrac_hand(:,:,k) = stats%classfrac_hand(k)
     end do
 
     ncstat = nf90_put_var(ofid,id_classfrac_slope,classfrac_slope,start=[a,b,1])
@@ -538,6 +600,9 @@ do y = 1,nblock_out(2)
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
     ncstat = nf90_put_var(ofid,id_classfrac_cti,classfrac_cti,start=[a,b,1])
+    if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+    ncstat = nf90_put_var(ofid,id_classfrac_hand,classfrac_hand,start=[a,b,1])
     if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
   end do    !output chunks
@@ -590,6 +655,12 @@ ncstat = nf90_inq_varid(ofid,'cticlass',varid)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 ncstat = nf90_put_var(ofid,varid,llim%cti_bin)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_inq_varid(ofid,'handclass',varid)
+if (ncstat/=nf90_noerr) call handle_err(ncstat)
+
+ncstat = nf90_put_var(ofid,varid,llim%hand_bin)
 if (ncstat/=nf90_noerr) call handle_err(ncstat)
 
 !---
